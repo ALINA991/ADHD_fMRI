@@ -1,0 +1,7 @@
+format: jb-book
+root: intro
+chapters:
+- file: markdown
+- file: attention_networks.md
+- file: notebooks
+- file: markdown-notebooks
