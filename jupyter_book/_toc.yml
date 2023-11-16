@@ -1,7 +1,10 @@
 format: jb-book
-root: intro
-chapters:
-- file: markdown
-- file: attention_networks.md
-- file: notebooks
-- file: markdown-notebooks
+root: intro.md
+parts:
+- caption: Literature research
+  chapters:
+  - file: lit_research/attention_networks.md
+  - file: lit_research/ADHD.md
+  - file: lit_research/testmd.md
+  - file: lit_research/sfn/sfn_d1.md
+   

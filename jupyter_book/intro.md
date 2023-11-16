@@ -1,16 +1,13 @@
-# Welcome to your Jupyter Book
+# Introduction
 
-This is a small sample book to give you a feel for how book content is
-structured.
+This project page will serve as notebook to document my progress for my masters thesis project.
 
 :::{note}
-Here is a note!
+Biomarkers for ADHD using complex network analysis on fMRI data
 :::
 
 And here is a code block:
 
-```
+```{code}
 e = mc^2
 ```
-
-Check out the content pages bundled with this sample book to see more.
