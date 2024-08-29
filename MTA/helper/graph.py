@@ -5,6 +5,8 @@ import plotly.graph_objs as go
 from plotly.offline import plot
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.impute import SimpleImputer
+from matplotlib import pyplot as plt
+from adjustText import adjust_text
 
 def compute_graph(df, measure, thr_edge, allow_neg_edge=False):
     # Compute the similarity or correlation matrix based on the chosen measure
@@ -40,62 +42,133 @@ def compute_graph(df, measure, thr_edge, allow_neg_edge=False):
     return G
 
 
-def plot_graph(G, question_dict, neg_edges = False):
+
+def plot_graph(G, question_dict, neg_edges=False, static=False, corr_width=False, plot_title="Network Graph"):
     # Position the nodes using the spring layout
-    pos = nx.spring_layout(G, seed = 42)
+    pos = nx.spring_layout(G, seed=42)
 
-    # Prepare the edge traces for Plotly
-    edge_trace = []
-    for edge in G.edges(data=True):
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        if neg_edges:
-            edge_color = edge[2]['color']
-            edge_trace.append(go.Scatter(
-                x=[x0, x1, None],
-                y=[y0, y1, None],
-                mode='lines',
-                line=dict(width=1.0, color=edge_color),
-                hoverinfo='none'
-        ))
-        else: 
-            edge_trace.append(go.Scatter(
-                x=[x0, x1, None],
-                y=[y0, y1, None],
-                mode='lines',
-                line=dict(width=0.5, color='#888'),
-                hoverinfo='none'
-            ))
-            
+    # Define a function to determine the line width based on correlation magnitude
+    def get_line_width(value):
+        return max(0.5, abs(value) * 5) if corr_width else 0.5  # Use correlation width or default thin lines
 
-    # Prepare the node trace
-    node_trace = go.Scatter(
-        x=[pos[node][0] for node in G.nodes()],
-        y=[pos[node][1] for node in G.nodes()],
-        mode='markers',
-        hoverinfo='text',
-        marker=dict(
-            showscale=False,
-            color=[],
-            size=10,
-            line_width=2),
-        text=[f"{node}: {question_dict[node]}" for node in G.nodes()]  # Hover text
-    )
+    if static:
+        # Prepare the edge traces for Plotly
+        edge_trace = []
+        for edge in G.edges(data=True):
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            width = get_line_width(edge[2]['weight'])
+            if neg_edges:
+                edge_color = edge[2]['color']
+                edge_trace.append(go.Scatter(
+                    x=[x0, x1, None],
+                    y=[y0, y1, None],
+                    mode='lines',
+                    line=dict(width=width, color=edge_color),
+                    hoverinfo='none'
+                ))
+            else: 
+                edge_trace.append(go.Scatter(
+                    x=[x0, x1, None],
+                    y=[y0, y1, None],
+                    mode='lines',
+                    line=dict(width=width, color='#888'),
+                    hoverinfo='none'
+                ))
 
-    # Create the layout
-    layout = go.Layout(
-        title='Interactive Network Graph with Positive and Negative Edges',
-        showlegend=False,
-        hovermode='closest',
-        margin=dict(b=0, l=0, r=0, t=40),
-        xaxis=dict(showgrid=False, zeroline=False),
-        yaxis=dict(showgrid=False, zeroline=False),
-        plot_bgcolor='white'
-    )
+        # Prepare the node trace without text labels
+        node_trace = go.Scatter(
+            x=[pos[node][0] for node in G.nodes()],
+            y=[pos[node][1] for node in G.nodes()],
+            mode='markers',
+            hoverinfo='text',
+            marker=dict(
+                showscale=False,
+                color=[],
+                size=10,
+                line_width=2),
+            text=[question_dict[node] for node in G.nodes()]  # Question text for hover info only
+        )
 
-    # Create the figure
-    fig = go.Figure(data=edge_trace + [node_trace], layout=layout)
+        # Create the layout with annotations for the labels
+        layout = go.Layout(
+            title=plot_title,
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=0, l=0, r=0, t=40),
+            xaxis=dict(showgrid=False, zeroline=False),
+            yaxis=dict(showgrid=False, zeroline=False),
+            plot_bgcolor='white',
+            annotations=[
+                dict(
+                    x=pos[node][0], 
+                    y=pos[node][1], 
+                    text=question_dict[node], 
+                    showarrow=False,
+                    xanchor="center", 
+                    yanchor="bottom",
+                    font=dict(size=10)
+                ) for node in G.nodes()
+            ]
+        )
 
-    # Plot the figure
-    plot(fig)
-    
+        # Create the figure
+        fig = go.Figure(data=edge_trace + [node_trace], layout=layout)
+
+        # Save the figure as an HTML file
+        plot(fig, filename='network_graph.html')
+    else:
+        # Interactive mode with hovering
+        edge_trace = []
+        for edge in G.edges(data=True):
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            width = get_line_width(edge[2]['weight'])
+            if neg_edges:
+                edge_color = edge[2]['color']
+                edge_trace.append(go.Scatter(
+                    x=[x0, x1, None],
+                    y=[y0, y1, None],
+                    mode='lines',
+                    line=dict(width=width, color=edge_color),
+                    hoverinfo='none'
+                ))
+            else: 
+                edge_trace.append(go.Scatter(
+                    x=[x0, x1, None],
+                    y=[y0, y1, None],
+                    mode='lines',
+                    line=dict(width=width, color='#888'),
+                    hoverinfo='none'
+                ))
+
+        # Prepare the node trace
+        node_trace = go.Scatter(
+            x=[pos[node][0] for node in G.nodes()],
+            y=[pos[node][1] for node in G.nodes()],
+            mode='markers',
+            hoverinfo='text',
+            marker=dict(
+                showscale=False,
+                color=[],
+                size=10,
+                line_width=2),
+            text=[question_dict[node] for node in G.nodes()]  # Hover text
+        )
+
+        # Create the layout
+        layout = go.Layout(
+            title=plot_title,
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=0, l=0, r=0, t=40),
+            xaxis=dict(showgrid=False, zeroline=False),
+            yaxis=dict(showgrid=False, zeroline=False),
+            plot_bgcolor='white'
+        )
+
+        # Create the figure
+        fig = go.Figure(data=edge_trace + [node_trace], layout=layout)
+
+        # Plot the figure
+        plot(fig)
