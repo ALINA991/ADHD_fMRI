@@ -51,7 +51,9 @@ def split_data_from_timepoints(df):
     df_24 = get_masked_df(df, 'days_baseline', 'lt' , 912) # 24 months 
     df_36 = get_masked_df(df, 'days_baseline', 'lt' ,  1195 ) # 36 months 
     
-    return df_baseline, df_14, df_24, df_36
+    dictt = {'b' : df_baseline, '14': df_14, '24': df_24, '36' : df_36}
+
+    return dictt
 
 def print_nonNaN_shapes(df, contains = None):
     if contains is not None : 
@@ -80,12 +82,12 @@ def set_baseline_dtypes(df, dropna = False):
             
         df['src_subject_id'] = df['src_subject_id'].astype('str')#df['src_subject_id'].str.strip()
         df['sex'] = df['sex'].astype('category')
-        df['site'] = df['sex'].astype('category')
+        df['site'] = df['site'].astype('category')
         df['interview_date'] = pd.to_datetime(df['interview_date'], format='%m/%d/%Y')
-        df[['interview_age', 'relationship',  'days_baseline']] = df[['interview_age', 'relationship', 'days_baseline']].astype(int)
+        df[['interview_age', 'days_baseline']] = df[['interview_age',  'days_baseline']].astype(int)
         
         if 'trtname' in df.columns:
-            df['trtname'] = df['sex'].astype('category')
+            df['trtname'] = df['trtname'].astype('category')
         print('Success')
         return df
     

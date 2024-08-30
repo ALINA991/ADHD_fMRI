@@ -50,12 +50,12 @@ def get_hyps_interactions():
         # 'hypothesis_sex' : (
         #     'C(sex)[T.M] = 0'), 
         
-        'time' : "days_baseline = 0",
+        #'time' : "days_baseline = 0",
         
-        'treat' : (
-            'C(trtname, Treatment(reference="L"))[T.M] = '
-            'C(trtname, Treatment(reference="L"))[T.P] = '
-            'C(trtname, Treatment(reference="L"))[T.C] = 0'),
+        # 'treat' : (
+        #     'C(trtname, Treatment(reference="L"))[T.M] = '
+        #     'C(trtname, Treatment(reference="L"))[T.P] = '
+        #     'C(trtname, Treatment(reference="L"))[T.C] = 0'),
         
         'site_treat' :  (
             'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.2] = '
@@ -79,29 +79,7 @@ def get_hyps_interactions():
             'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.6] = 0'),
         
         'time_treat' :  ('C(trtname, Treatment(reference="L"))[T.M]:days_baseline = C(trtname, Treatment(reference="L"))[T.P]:days_baseline  = C(trtname, Treatment(reference="L"))[T.C]:days_baseline = 0'),
-        
-        'site_time_treat' : (   
-
-
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
-
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
-
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
-
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
-
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = 0')}
+}
 
     return hyps_interactions
 
@@ -254,7 +232,7 @@ def get_replication_vars(questionnaire): # vars for replication
     if questionnaire == 'ssrs': 
         
         return  {
-        'relationship' : 'relationship', # just use relationship directly
+
         'ssrs_ss_mean' :'ssptossx', #social skilla mean 
         'ssrs_ss_std' : 'ssptosst', #std
         'ssrs_int_mean' : 'sspintx', #internalizing 
@@ -265,7 +243,7 @@ def get_replication_vars(questionnaire): # vars for replication
     elif questionnaire == 'snap': 
         
         return {
-    'relationship' : 'relationship',
+
     'snap_inatt_mean' : 'snainatx', #inattentuin 
     'snap_inatt_tot' :'snainatt', # hyperactie 
     'snap_hyp_mean' : 'snahypax',
@@ -279,14 +257,14 @@ def get_replication_vars(questionnaire): # vars for replication
     elif questionnaire == 'masc': 
         
         return {
-    'relationship' : 'relationship', 
+
     'masc_tot_T_score' : 'masc_masctotalt'
     }  
         
     elif questionnaire == 'pc': #parent child 
         
         return {
-    'pc_relationship' : 'relationship', 
+
     'pc_dominance_mean' : 'pcrcpax', #power assertion
     'pc_pro_social_mean' : 'pcrcprx' #personal closeness 
     }   
@@ -294,7 +272,6 @@ def get_replication_vars(questionnaire): # vars for replication
     elif questionnaire == 'wechsler': 
         
         return {
-    'relationship' : 'relationship',
     'wiat_reading_sc': 'w1readb', # scaled scores 
     'wiat_math_sc' : 'w2math', 
     'wiat_read_sc' : 'w3spell'
