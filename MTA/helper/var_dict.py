@@ -40,12 +40,8 @@ def get_hyps_to_vars():
     
 def get_hyps_interactions():
     hyps_interactions = {
-        'site' : (
-            'C(site)[T.2] = '
-            'C(site)[T.3] = '
-            'C(site)[T.4] = '
-            'C(site)[T.5] = '
-            'C(site)[T.6] = 0'),
+        'time_treat' :  ('C(trtname, Treatment(reference="L"))[T.M]:days_baseline = C(trtname, Treatment(reference="L"))[T.P]:days_baseline  = C(trtname, Treatment(reference="L"))[T.C]:days_baseline = 0'),
+
         
         # 'hypothesis_sex' : (
         #     'C(sex)[T.M] = 0'), 
@@ -78,7 +74,12 @@ def get_hyps_interactions():
             'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.6] = '
             'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.6] = 0'),
         
-        'time_treat' :  ('C(trtname, Treatment(reference="L"))[T.M]:days_baseline = C(trtname, Treatment(reference="L"))[T.P]:days_baseline  = C(trtname, Treatment(reference="L"))[T.C]:days_baseline = 0'),
+                'site' : (
+            'C(site)[T.2] = '
+            'C(site)[T.3] = '
+            'C(site)[T.4] = '
+            'C(site)[T.5] = '
+            'C(site)[T.6] = 0')
 }
 
     return hyps_interactions
