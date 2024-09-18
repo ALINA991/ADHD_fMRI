@@ -56,7 +56,13 @@ def f_test_interactions(mixedlm_result, hyps, alpha):
 
     return pd.DataFrame(results)
 
-
+def extract_mean_for_contrast(mean_dict, qst, var, time ):
+    mean = []
+    for group in ['C', 'M', 'P', 'L']:
+        mean.append(mean_dict[qst][time][group][var])
+    return mean
+    
+    
 
 def get_sig_vars(df_interaction_results, alpha):
 
@@ -80,10 +86,57 @@ def get_formula(outcome_var, predictor_list,  include_all = True):
         formula = ' + '.join(form)
     return formula 
 
+def get_contrast_matrix(paper = 'original', new_order = None):
+    if paper == 'original':
+        
+        contrast_matrix = np.array([ # add 0 column for intercept generated from RR, ignored bc coefficients for contrasts = 0
+            [0, 1, -1, 0, 0],  # M vs P
+            [0, -1, 0, 1, 0],  # C vs M
+            [0, 0, -1, 1, 0],  # C vs P
+            [0, -1, 0, 0, 1],  # L vs M
+            [0, 0, -1, 0, 1],  # L vs P
+            [0, 0, 0, -1, 1]   # L vs C
+        ])
+
+    elif paper == 'molina':
+        contrast_matrix = np.array([[ 0, 1, -1	,1,-1],   # (M,C) vs (B,CC)
+                                    [ 0, 1, 0,	-1,	0],   # (M vs C)
+                                    [ 0, 0, 1	,0,-1]])  # (B vs CC)
+  
+    contrast_m = pd.DataFrame(contrast_matrix, columns=['intercept', 'M', 'P', 'C', 'L'])
+    if new_order is not None:
+        contrast_m = contrast_m[new_order]
+    return contrast_m
+
+def ortho_contrasts_molina(outcome, predictor, data):
+
+    formula =' ~ '.join((outcome, predictor))
+    # change when get access to CC data, careful with interpretations !
+    contrasts_matrix = np.array([[  0, 1,	-1	,1,	-1],
+                                [	0, 1,	0,	-1,	0],
+                                [ 	0, 0	,1	,0	,-1]])
+    
+    trtname = ['intercept', 'M', 'P', 'C', 'L']
+    
+    contrasts_matrix = pd.DataFrame(contrasts_matrix, columns= trtname)
+
+
+    model = smf.mixedlm(formula, data = data, groups='src_subject_id')
+    result = model.fit()
+
+    new_order = [item.split('[')[0].lower() if 'Intercept' in item else item.split('[')[1][2] for item in result.model.exog_names]
+    contrasts_matrix = contrasts_matrix[new_order]
+
+
+    contrasts = result.t_test(contrasts_matrix)
+    # Print the results of the contrast tests
+    print(contrasts)
 
 def highlight_significant_p_values(val, alpha):
     color = 'background-color: blue' if val < alpha else ''
     return color
+
+
 
 #################### DATA PREPARE ####################
 
@@ -170,5 +223,47 @@ def get_hyps_interactions():
 
     return hyps_interactions
 
-#################### PLOT ########################
 
+
+def perform_contrasts(data, formula, type_contrast, alpha, version_form, bonferroni):
+    if version_form is not None:
+        data = data[data['version_form'] == version_form]
+        
+    if bonferroni : 
+        alpha = alpha / data.shape[0]
+
+
+    # change when get access to CC data, careful with interpretations !
+    contrasts_matrix = get_contrast_matrix(type_contrast)
+
+    model = smf.mixedlm(formula, data = data, groups='src_subject_id')
+    result = model.fit()
+
+    new_order = [item.split('[')[0].lower() if 'Intercept' in item else item.split('[')[1][2] for item in result.model.exog_names]
+    contrasts_matrix = contrasts_matrix[new_order]
+
+
+    contrasts = result.t_test(contrasts_matrix)
+
+    coef = contrasts.effect
+    stderr = contrasts.sd
+    z_scores = contrasts.tvalue
+    p_values = contrasts.pvalue
+    conf_int = contrasts.conf_int()
+
+    significant =  p_values < alpha
+
+    comp_results_str = []
+
+    for i, val in enumerate(significant): 
+        print(val)
+        if val and coef[i] > 0 :
+            results_sign = ' < ' # this would be inverted if we were comparing the means, but we want to know which treatment DECREASE the outcome variable
+        elif val and coef[i] < 0 :
+            results_sign = ' > '
+        else: 
+            results_sign = ' ~ '
+        comp = np.array(contrasts_matrix.columns[contrasts_matrix.iloc[i] != 0])
+        comp_results_str.append(results_sign.join(comp))
+    
+    return p_values, comp_results_str

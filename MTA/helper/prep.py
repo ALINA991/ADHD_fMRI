@@ -12,6 +12,37 @@ import scipy.stats as stats
 
 from helper import rr, var_dict
 
+def get_data(path, columns, treat_group, set_dtypes = True, version_form = False, split_timepoints = False):
+    ##treat_group = pd.read_csv('/Volumes/Samsung_T5/MIT/mta/output/derived_data/treatment_groups.csv')
+    
+    if len(columns) > 0 : 
+        columns = np.concatenate(columns)
+    try : 
+        df = pd.read_csv(path, delimiter="\t", usecols=columns, skiprows=[1] , parse_dates=['interview_date']).dropna(subset='days_baseline').drop_duplicates()
+    except Exception as e:
+        if str(e) ==  "Missing column provided to 'parse_dates': 'interview_date'":
+            df = pd.read_csv(path, delimiter="\t", usecols=columns, skiprows=[1]).dropna(subset='days_baseline').drop_duplicates()
+        else:
+            raise e
+
+    df = pd.merge(df, treat_group, how='inner', on = 'src_subject_id').dropna()#.table with relevant snap vales, rater, and treatment group 
+    
+    if set_dtypes:
+        set_baseline_dtypes(df)
+        
+    if version_form:
+        df.loc[df['version_form'].str.startswith('Teacher'), 'version_form'] = 'Teacher'
+        df.loc[df['version_form'].str.startswith('Parent'), 'version_form'] = 'Parent'
+        
+    if split_timepoints:
+        return split_data_from_timepoints(df)
+    else: 
+        return df
+
+
+    
+    
+
 def get_masked_df(dataframe, column_name, condition, value_for_condition):
     if condition == 'eq': 
         mask = dataframe[column_name] == value_for_condition
@@ -36,7 +67,8 @@ def get_masked_df(dataframe, column_name, condition, value_for_condition):
     else : raise ValueError('Verify your condition')
     
     
-def split_data_from_timepoints(df): 
+def split_data_from_timepoints(df, timepoints = None): 
+    
     try : 
         df['days_baseline'] = df['days_baseline'].astype(int)
     except ValueError as e :
@@ -45,20 +77,43 @@ def split_data_from_timepoints(df):
             df['days_baseline'] = df['days_baseline'].astype(int)
         else :
             raise e
+        
+    if timepoints is not None: 
+        dfs = [get_masked_df(df,  'days_baseline', 'lt' , timepoint) for timepoint in timepoints]
+        dictt = dict(zip(timepoints, dfs))
     
-    df_baseline = get_masked_df(df, 'days_baseline', 'eq' , 0) #baseline 
-    df_14 = get_masked_df(df, 'days_baseline' ,'lt', 578) # 14 months 
-    df_24 = get_masked_df(df, 'days_baseline', 'lt' , 912) # 24 months 
-    df_36 = get_masked_df(df, 'days_baseline', 'lt' ,  1195 ) # 36 months 
-    
-    dictt = {'b' : df_baseline, '14': df_14, '24': df_24, '36' : df_36}
+    else: 
+
+        
+        df_baseline = get_masked_df(df, 'days_baseline', 'eq' , 0).copy() #baseline 
+        df_14 = get_masked_df(df, 'days_baseline' ,'lt', 578).copy() # 14 months 
+        df_24 = get_masked_df(df, 'days_baseline', 'lt' , 912).copy() # 24 months 
+        df_36 = get_masked_df(df, 'days_baseline', 'lt' ,  1195 ).copy() # 36 months 
+        
+        dictt = {'b' : df_baseline, '14': df_14, '24': df_24, '36' : df_36}
 
     return dictt
 
+def split_data_from_timepoints_custom(df, timepoints): 
+    try : 
+        df['days_baseline'] = df['days_baseline'].astype(int)
+    except ValueError as e :
+        if str(e) == ("invalid literal for int() with base 10: 'Days since baseline'"):
+            df = df.drop(0, axis = 0)
+            df['days_baseline'] = df['days_baseline'].astype(int)
+        else :
+            raise e
+        
+    dfs = [get_masked_df(df, 'days_baseline', 'lt' , timepoint).copy() for timepoint in timepoints]
+    
+    
+    dictt = dict(zip(timepoints, dfs))
+
+    return dictt
 def print_nonNaN_shapes(df, contains = None):
     if contains is not None : 
         for i, col in zip(range(df.shape[1]), df.columns): 
-            if df.iloc[:,i].dropna().shape[0] > 1 and df.iloc[0, i].rfind(contains) != -1 :
+            if df.iloc[:,i].dropna().shape[0] > 1 and df.iloc[0, i].lower().rfind(contains.lower()) != -1 :
                 print(i,col, df.iloc[0, i], df.iloc[:,i].dropna().shape)
     else: 
         for i, col in zip(range(df.shape[1]), df.columns): 
@@ -115,5 +170,13 @@ def set_dtypes(df,  dtypes_dict , set_baseline=True):
     return df
     
         
-# def drop_description():
-#     pass
+########## format results ########
+
+def find_first_index(df, column, value, condition = None):
+    if condition is not None:
+        condition_column, condition_value = condition.split(' == ')
+        return df[(df[column] == value) & (df[condition_column] == condition_value)].index[0]
+    else:
+        return (df[column] == value).idxmax()
+    
+    
