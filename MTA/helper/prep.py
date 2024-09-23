@@ -43,7 +43,7 @@ def get_data(path, columns, treat_group, set_dtypes = True, version_form = False
     
     
 
-def get_masked_df(dataframe, column_name, condition, value_for_condition):
+def get_masked_df(dataframe, column_name, condition, value_for_condition, delta = None):
     if condition == 'eq': 
         mask = dataframe[column_name] == value_for_condition
         masked_df = dataframe[mask]
@@ -63,6 +63,10 @@ def get_masked_df(dataframe, column_name, condition, value_for_condition):
     elif condition == 'let': 
         mask = dataframe[column_name] <= value_for_condition
         masked_df = dataframe[mask]
+    elif condition == 'range':
+        mask = (dataframe[column_name] <= value_for_condition + delta) & (dataframe[column_name] >= value_for_condition - delta)
+        masked_df = dataframe[mask]
+        
         return masked_df
     else : raise ValueError('Verify your condition')
     
@@ -94,7 +98,7 @@ def split_data_from_timepoints(df, timepoints = None):
 
     return dictt
 
-def split_data_from_timepoints_custom(df, timepoints): 
+def split_data_from_timepoints_custom(df, timepoints, how = 'lt', delta = None): 
     try : 
         df['days_baseline'] = df['days_baseline'].astype(int)
     except ValueError as e :
@@ -103,8 +107,8 @@ def split_data_from_timepoints_custom(df, timepoints):
             df['days_baseline'] = df['days_baseline'].astype(int)
         else :
             raise e
-        
-    dfs = [get_masked_df(df, 'days_baseline', 'lt' , timepoint).copy() for timepoint in timepoints]
+
+    dfs = [get_masked_df(df, 'days_baseline', how , timepoint, delta).copy() for timepoint in timepoints]
     
     
     dictt = dict(zip(timepoints, dfs))
@@ -180,3 +184,20 @@ def find_first_index(df, column, value, condition = None):
         return (df[column] == value).idxmax()
     
     
+def split_on_occurrence(s, char, occurrence=1):
+    if occurrence == 1:
+        # Find the index of the first occurrence of the character
+        index = s.find(char)
+    elif occurrence == 2:
+        # Find the index of the second occurrence of the character
+        first_occurrence = s.find(char)
+        index = s.find(char, first_occurrence + 1)
+    else:
+        raise ValueError("Occurrence must be 1 or 2")
+
+    # If the occurrence is found, split the string
+    if index != -1:
+        return s[:index], s[index+1:]
+    else:
+        # If the occurrence isn't found, return the original string
+        return s, ''
