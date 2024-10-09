@@ -223,6 +223,9 @@ def get_hyps_interactions():
 
     return hyps_interactions
 
+def get_hyps_interaction_mediators():
+    pass
+
 
 
 def perform_contrasts(data, formula, type_contrast, alpha, version_form, bonferroni):

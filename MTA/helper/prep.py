@@ -107,8 +107,14 @@ def split_data_from_timepoints_custom(df, timepoints, how = 'lt', delta = None):
             df['days_baseline'] = df['days_baseline'].astype(int)
         else :
             raise e
-
-    dfs = [get_masked_df(df, 'days_baseline', how , timepoint, delta).copy() for timepoint in timepoints]
+        
+    if timepoints[0] == 0:
+        df0 = [get_masked_df(df, 'days_baseline', 'eq', timepoints[0]).copy() ]
+        dfs_ = [get_masked_df(df, 'days_baseline', how , timepoint, delta).copy() for timepoint in timepoints[1:]]
+        dfs =  dfs = df0 + dfs_
+        
+    else:
+        dfs = [get_masked_df(df, 'days_baseline', how , timepoint, delta).copy() for timepoint in timepoints]
     
     
     dictt = dict(zip(timepoints, dfs))
