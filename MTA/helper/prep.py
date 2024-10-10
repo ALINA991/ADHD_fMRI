@@ -89,7 +89,7 @@ def split_data_from_timepoints(df, timepoints = None):
     else: 
 
         
-        df_baseline = get_masked_df(df, 'days_baseline', 'eq' , 0).copy() #baseline 
+        df_baseline = get_masked_df(df, 'days_baseline', 'lt' , 0).copy() #baseline 
         df_14 = get_masked_df(df, 'days_baseline' ,'lt', 578).copy() # 14 months 
         df_24 = get_masked_df(df, 'days_baseline', 'lt' , 912).copy() # 24 months 
         df_36 = get_masked_df(df, 'days_baseline', 'lt' ,  1195 ).copy() # 36 months 
@@ -166,6 +166,7 @@ def set_baseline_dtypes(df, dropna = False):
             print('Could not identify problem. Exiting... ')
             raise(ValueError)
     return df
+
 
 
 def set_dtypes(df,  dtypes_dict , set_baseline=True):
