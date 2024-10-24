@@ -9,14 +9,23 @@ import seaborn as sns
 import researchpy as rp
 import statsmodels.formula.api as smf
 import scipy.stats as stats
+import collections
 
 from helper import rr, var_dict
 
 def get_data(path, columns, treat_group, set_dtypes = True, version_form = False, split_timepoints = False):
     ##treat_group = pd.read_csv('/Volumes/Samsung_T5/MIT/mta/output/derived_data/treatment_groups.csv')
     
-    if len(columns) > 0 : 
-        columns = np.concatenate(columns)
+    if any(isinstance(i, collections.abc.Iterable) for i in columns): 
+        columns = list(np.concatenate(columns))
+        
+    test = ['version_form' in col for col in columns]
+    
+    if version_form and not np.array(test).any():
+        columns.append('version_form')
+    elif not version_form and np.array(test).any():
+        columns.remove('version_form')
+        
     try : 
         df = pd.read_csv(path, delimiter="\t", usecols=columns, skiprows=[1] , parse_dates=['interview_date']).dropna(subset='days_baseline').drop_duplicates()
     except Exception as e:
@@ -31,6 +40,7 @@ def get_data(path, columns, treat_group, set_dtypes = True, version_form = False
         set_baseline_dtypes(df)
         
     if version_form:
+
         df.loc[df['version_form'].str.startswith('Teacher'), 'version_form'] = 'Teacher'
         df.loc[df['version_form'].str.startswith('Parent'), 'version_form'] = 'Parent'
         
