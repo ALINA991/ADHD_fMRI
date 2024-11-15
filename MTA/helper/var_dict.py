@@ -31,16 +31,16 @@ def get_hyps_to_vars():
     hyps_to_vars= {
     'site' : 'C(site)', 
     'time' : 'days_baseline', 
-    'treat' : 'C(trtname, Treatment(reference="L"))',
-    'site_treat' : 'C(site) * C(trtname, Treatment(reference="L"))',
-    'time_treat': 'days_baseline * C(trtname, Treatment(reference="L"))',
-    'site_time_treat' : 'days_baseline * C(trtname, Treatment(reference="L")) * C(site))',
+    'treat' : 'C(trtname, Treatment(reference="A"))',
+    'site_treat' : 'C(site) * C(trtname, Treatment(reference="A"))',
+    'time_treat': 'days_baseline * C(trtname, Treatment(reference="A"))',
+    'site_time_treat' : 'days_baseline * C(trtname, Treatment(reference="A")) * C(site))',
 }
     return hyps_to_vars
     
 def get_hyps_interactions():
     hyps_interactions = {
-        'time_treat' :  ('C(trtname, Treatment(reference="L"))[T.M]:days_baseline = C(trtname, Treatment(reference="L"))[T.P]:days_baseline  = C(trtname, Treatment(reference="L"))[T.C]:days_baseline = 0'),
+        'time_treat' :  ('C(trtname, Treatment(reference="A"))[T.M]:days_baseline = C(trtname, Treatment(reference="A"))[T.P]:days_baseline  = C(trtname, Treatment(reference="A"))[T.C]:days_baseline = 0'),
 
         
         # 'hypothesis_sex' : (
@@ -49,30 +49,30 @@ def get_hyps_interactions():
         #'time' : "days_baseline = 0",
         
         # 'treat' : (
-        #     'C(trtname, Treatment(reference="L"))[T.M] = '
-        #     'C(trtname, Treatment(reference="L"))[T.P] = '
-        #     'C(trtname, Treatment(reference="L"))[T.C] = 0'),
+        #     'C(trtname, Treatment(reference="A"))[T.M] = '
+        #     'C(trtname, Treatment(reference="A"))[T.P] = '
+        #     'C(trtname, Treatment(reference="A"))[T.C] = 0'),
         
         'site_treat' :  (
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.2] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.3] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.4] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.5] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.6] = 0'),
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.6] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.6] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.6] = 0'),
         
                 'site' : (
             'C(site)[T.2] = '

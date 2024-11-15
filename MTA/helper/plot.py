@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from pathlib import Path
 import numpy as np
+from scipy.optimize import curve_fit
 
 ###################### INSPECT ################################
-def scatter_per_subject(df, var, days_baseline = None, groupby = 'src_subject_id', x_axis_type = 'days', n_subjects = None):
+def scatter_per_subject(df, var, days_baseline = None, outcomes_dict_fig = None, groupby = 'src_subject_id', x_axis_type = 'days', n_subjects = None, cutoffs = None, plot_L = False, save_path = None):
     
     if days_baseline is not None : 
         if isinstance(days_baseline, int):
@@ -13,8 +14,8 @@ def scatter_per_subject(df, var, days_baseline = None, groupby = 'src_subject_id
         elif isinstance(days_baseline, (list, tuple, np.ndarray)):
             df = df[ (df['days_baseline'] > days_baseline[0]) & (df['days_baseline']< days_baseline[1])]
             
-        
-    df = df[df['trtname'] != 'L']
+    if plot_L == False:
+        df = df[df['trtname'] != 'L']
     
     groups = df.groupby(groupby)
         # Optionally limit the number of subjects to plot
@@ -22,16 +23,19 @@ def scatter_per_subject(df, var, days_baseline = None, groupby = 'src_subject_id
         # Select only the first n_subjects groups
         groups = list(groups)[:n_subjects]
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(10, 7))
+    
+    trtname_c_dict = {"P": 'purple', "M": 'red', "C": 'orange', "A": "green"}
 
     # Plot each subject's data in a different color
     for name, group in groups:
-        if x_axis_type == 'months':
-            # Convert days to months by dividing by 30
-            plt.scatter(group['days_baseline'] / 30, group[var], label=name)
-        else:
-            # Use days as is
-            plt.scatter(group['days_baseline'], group[var], label=name)
+        if name != 'L':
+            if x_axis_type == 'months':
+                # Convert days to months by dividing by 30
+                plt.scatter(group['days_baseline'] / 30, group[var], color= trtname_c_dict[name], label=name + ', n = ' + str(group['src_subject_id'].unique().shape[0]))
+            else:
+                # Use days as is
+                plt.scatter(group['days_baseline'], group[var], color=  trtname_c_dict[name],  label=name+ ', n = ' +str(group['src_subject_id'].unique().shape[0]))
 
     # Set axis labels
     plt.ylabel(var.upper())
@@ -43,16 +47,26 @@ def scatter_per_subject(df, var, days_baseline = None, groupby = 'src_subject_id
         plt.xlabel('Months Since Baseline')
         plt.gca().xaxis.set_major_locator(ticker.MultipleLocator(1))  # Set major ticks every 1 month
   
+  
+    if cutoffs is not None :
+        for cutoff in cutoffs:
+            plt.axvline(x=cutoff[1], color='r', linestyle='--')
     # Add labels and a legend
 
     plt.ylabel(var.upper())
     plt.tight_layout()
     
     if groupby == 'trtname':
-        plt.legend(title='Tretament arm', bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.legend(title='Treatment arm', bbox_to_anchor=(1.05, 1), loc='upper left')
     # Show the plot
+ 
+    
+    plt.title(outcomes_dict_fig[var] + ' Assessements Over Time')
+    
+    if save_path is not None:
+        plt.savefig(Path(save_path ,  'scattered_' + var + '_gb_' + groupby + '.png'), bbox_inches='tight')
     plt.show()
-
+    
 
 ########################## RR ##################################
 def get_point_av(df, pred_col_name, timepoints_range):
@@ -136,6 +150,30 @@ def extract_line_plot(df, pred_col_name, type_plot, timepoints, delta = None, pn
            
         else:
             print("Not enough points for polynomial fit in treatment group:")   
+            return
+    elif type_plot == "exp":
+        print('type negative exponential fit')
+        if pnt_av is not None and len(pnt_av) >= 4:
+            # Define a negative exponential function
+            def negative_exponential(x, a, b, c):
+                return a * np.exp(-b * x) + c
+            
+            try:
+                # Fit the negative exponential to the timepoints
+                params, _ = curve_fit(negative_exponential, pnt_av[:, 0], pnt_av[:, 1], p0=(1, 0.1, 1))
+                x_fit = np.linspace(min(pnt_av[:, 0]), max(pnt_av[:, 0]), 100)
+                smoothed = negative_exponential(x_fit, *params)
+                
+                smoothed_df = pd.DataFrame({
+                    'days_baseline': x_fit,
+                    'smoothed_value': smoothed
+                })
+                print(f"Exponential fit parameters: a={params[0]}, b={params[1]}, c={params[2]}")
+            except RuntimeError:
+                print("Exponential fit failed to converge.")
+                return
+        else:
+            print("Not enough points for exponential fit.")
             return
     else:
         print("Plot type not recognized.")

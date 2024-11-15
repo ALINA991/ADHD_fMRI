@@ -15,29 +15,39 @@ from helper import rr, var_dict
 
 def get_data(path, columns, treat_group, set_dtypes = True, version_form = False, split_timepoints = False):
     ##treat_group = pd.read_csv('/Volumes/Samsung_T5/MIT/mta/output/derived_data/treatment_groups.csv')
-    
-    if any(isinstance(i, collections.abc.Iterable) for i in columns): 
-        columns = list(np.concatenate(columns))
+    if columns is not None: 
+        if any(isinstance(i, collections.abc.Iterable) for i in columns): 
+            columns = list(np.concatenate(columns))
+            
+        test = ['version_form' in col for col in columns]
         
-    test = ['version_form' in col for col in columns]
-    
-    if version_form and not np.array(test).any():
-        columns.append('version_form')
-    elif not version_form and np.array(test).any():
-        columns.remove('version_form')
+        if version_form and not np.array(test).any():
+            columns.append('version_form')
+        elif not version_form and np.array(test).any():
+            columns.remove('version_form')
         
-    try : 
-        df = pd.read_csv(path, delimiter="\t", usecols=columns, skiprows=[1] , parse_dates=['interview_date']).dropna(subset='days_baseline').drop_duplicates()
-    except Exception as e:
-        if str(e) ==  "Missing column provided to 'parse_dates': 'interview_date'":
-            df = pd.read_csv(path, delimiter="\t", usecols=columns, skiprows=[1]).dropna(subset='days_baseline').drop_duplicates()
-        else:
-            raise e
-
-    df = pd.merge(df, treat_group, how='inner', on = 'src_subject_id').dropna()#.table with relevant snap vales, rater, and treatment group 
-    
+        try : 
+            df = pd.read_csv(path, delimiter="\t", usecols=columns, skiprows=[1] , parse_dates=['interview_date']).dropna(subset='days_baseline').drop_duplicates()
+        except Exception as e:
+            if str(e) ==  "Missing column provided to 'parse_dates': 'interview_date'":
+                df = pd.read_csv(path, delimiter="\t", usecols=columns, skiprows=[1]).dropna(subset='days_baseline').drop_duplicates()
+            else:
+                raise e
+    else: 
+        print("all columns")
+        try : 
+            df = pd.read_csv(path, delimiter="\t",  skiprows=[1] , parse_dates=['interview_date']).dropna(subset='days_baseline').drop_duplicates()
+            print(df.shape)
+        except Exception as e:
+            if str(e) ==  "Missing column provided to 'parse_dates': 'interview_date'":
+                df = pd.read_csv(path, delimiter="\t", skiprows=[1]).dropna(subset='days_baseline').drop_duplicates()
+            else:
+                raise e
     if set_dtypes:
         set_baseline_dtypes(df)
+    df = pd.merge(df, treat_group, how='inner', on = 'src_subject_id')#.dropna()#.table with relevant snap vales, rater, and treatment group 
+    print(df.shape)
+
         
     if version_form:
 
@@ -73,16 +83,19 @@ def get_masked_df(dataframe, column_name, condition, value_for_condition, delta 
     elif condition == 'let': 
         mask = dataframe[column_name] <= value_for_condition
         masked_df = dataframe[mask]
-    elif condition == 'range':
+    elif condition == 'range' and delta is not None:
         mask = (dataframe[column_name] <= value_for_condition + delta) & (dataframe[column_name] >= value_for_condition - delta)
         masked_df = dataframe[mask]
+    elif condition == 'range' and value_for_condition.isinstance(tuple):
+        mask = (dataframe[column_name] <= value_for_condition[1]) & (dataframe[column_name] >= value_for_condition[0])
+        masked_df = dataframe[mask]
         
-        return masked_df
-    else : raise ValueError('Verify your condition')
+    else : raise ValueError('Verify the condition')
+    return masked_df
     
     
 def split_data_from_timepoints(df, timepoints = None): 
-    
+    df = df.dropna(subset='days_baseline')
     try : 
         df['days_baseline'] = df['days_baseline'].astype(int)
     except ValueError as e :
@@ -91,20 +104,31 @@ def split_data_from_timepoints(df, timepoints = None):
             df['days_baseline'] = df['days_baseline'].astype(int)
         else :
             raise e
-        
     if timepoints is not None: 
-        dfs = [get_masked_df(df,  'days_baseline', 'lt' , timepoint) for timepoint in timepoints]
-        dictt = dict(zip(timepoints, dfs))
-    
-    else: 
-
         
-        df_baseline = get_masked_df(df, 'days_baseline', 'lt' , 0).copy() #baseline 
-        df_14 = get_masked_df(df, 'days_baseline' ,'lt', 578).copy() # 14 months 
-        df_24 = get_masked_df(df, 'days_baseline', 'lt' , 912).copy() # 24 months 
-        df_36 = get_masked_df(df, 'days_baseline', 'lt' ,  1195 ).copy() # 36 months 
+        if isinstance(timepoints, (list, np.ndarray, tuple)) and isinstance(timepoints[0], int): 
+            dfs = [get_masked_df(df,  'days_baseline', 'lt' , timepoint) for timepoint in timepoints]
+            dictt = dict(zip(timepoints, dfs))
+        
+        elif isinstance(timepoints, str) and timepoints == "standard_range" or (isinstance(timepoints, (list, np.ndarray, tuple)) and isinstance(timepoints[0], tuple)):
+            dfs = [get_masked_df(df,  'days_baseline', 'range' , timepoint) for timepoint in timepoints]
+            dictt = dict(zip(timepoints, dfs))
+
+            dictt = {'b' : df_baseline, '14': df_14, '24': df_24, '36' : df_36}
+        
+        else: 
+            print('Timepoints condition not recognized. Please specify a list, tuple, or nd array.')
+
+    else:
+        print('No timepoints specifed. Using (46,168,319,500) by default.')
+        df_baseline = get_masked_df(df, 'days_baseline', 'lt' , 46).copy() #baseline 
+        df_14 = get_masked_df(df, 'days_baseline' ,'lt', 168).copy() # 14 months 
+        df_24 = get_masked_df(df, 'days_baseline', 'lt' , 319).copy() # 24 months 
+        df_36 = get_masked_df(df, 'days_baseline', 'lt' ,  500 ).copy() # 36 months 
         
         dictt = {'b' : df_baseline, '14': df_14, '24': df_24, '36' : df_36}
+
+        
 
     return dictt
 
@@ -166,7 +190,7 @@ def set_baseline_dtypes(df, dropna = False):
         print('Success')
         return df
     
-    except(ValueError):
+    except ValueError as e :
 
         print('Conversion encountered a problem. Attempt to drop description line.')
         if df['src_subject_id'].iloc[0] == 'Subject ID how it\'s defined in lab/project': #check whether description line exists 
@@ -174,7 +198,7 @@ def set_baseline_dtypes(df, dropna = False):
             set_baseline_dtypes(df)
         else:
             print('Could not identify problem. Exiting... ')
-            raise(ValueError)
+            raise(ValueError(e))
     return df
 
 

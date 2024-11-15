@@ -9,7 +9,7 @@ import seaborn as sns
 import researchpy as rp
 import statsmodels.formula.api as smf
 import scipy.stats as stats
-
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 ################## STATS #######################
 
@@ -171,74 +171,62 @@ def get_hyps_interactions():
         'time' : "days_baseline = 0",
         
         'treat' : (
-            'C(trtname, Treatment(reference="L"))[T.M] = '
-            'C(trtname, Treatment(reference="L"))[T.P] = '
-            'C(trtname, Treatment(reference="L"))[T.C] = 0'),
+            'C(trtname, Treatment(reference="A"))[T.M] = '
+            'C(trtname, Treatment(reference="A"))[T.P] = '
+            'C(trtname, Treatment(reference="A"))[T.C] = 0'),
         
         'site_treat' :  (
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.2] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.3] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.4] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.5] = '
             
-            'C(trtname, Treatment(reference="L"))[T.M]:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:C(site)[T.6] = 0'),
+            'C(trtname, Treatment(reference="A"))[T.M]:C(site)[T.6] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:C(site)[T.6] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:C(site)[T.6] = 0'),
         
-        'time_treat' :  ('C(trtname, Treatment(reference="L"))[T.M]:days_baseline = C(trtname, Treatment(reference="L"))[T.P]:days_baseline  = C(trtname, Treatment(reference="L"))[T.C]:days_baseline = 0'),
+        'time_treat' :  ('C(trtname, Treatment(reference="A"))[T.M]:days_baseline = C(trtname, Treatment(reference="A"))[T.P]:days_baseline  = C(trtname, Treatment(reference="A"))[T.C]:days_baseline = 0'),
         
         'site_time_treat' : (   
+            'C(trtname, Treatment(reference="A"))[T.M]:days_baseline:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:days_baseline:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:days_baseline:C(site)[T.2] = '
 
+            'C(trtname, Treatment(reference="A"))[T.M]:days_baseline:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:days_baseline:C(site)[T.3] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:days_baseline:C(site)[T.2] = '
 
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.2] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:days_baseline:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:days_baseline:C(site)[T.4] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:days_baseline:C(site)[T.2] = '
 
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.3] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
+            'C(trtname, Treatment(reference="A"))[T.M]:days_baseline:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:days_baseline:C(site)[T.5] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:days_baseline:C(site)[T.2] = '
 
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.4] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
-
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.5] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = '
-
-            'C(trtname, Treatment(reference="L"))[T.M]:days_baseline:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.P]:days_baseline:C(site)[T.6] = '
-            'C(trtname, Treatment(reference="L"))[T.C]:days_baseline:C(site)[T.2] = 0')}
+            'C(trtname, Treatment(reference="A"))[T.M]:days_baseline:C(site)[T.6] = '
+            'C(trtname, Treatment(reference="A"))[T.P]:days_baseline:C(site)[T.6] = '
+            'C(trtname, Treatment(reference="A"))[T.C]:days_baseline:C(site)[T.2] = 0')}
 
     return hyps_interactions
 
 def get_hyps_interaction_mediators():
     pass
 
-def get_rolling_av(subset, pred_col_name, window):
-    subset_sorted = subset.sort_values('days_baseline')
-# Apply rolling mean across the 'days_baseline'
-    smoothed = subset_sorted[pred_col_name].rolling(window=window, min_periods=1).mean()
 
-    # Ensure the rolling mean values are aligned with the sorted 'days_baseline'
-    smoothed_df = pd.DataFrame({
-        'days_baseline': subset_sorted['days_baseline'],
-        'smoothed_value': smoothed
-    })
-    return smoothed_df
 
-def extract_prediction(results, data_dict, to_plot):
+def extract_prediction(results, data_dict, to_plot, raters = None):
     # extract predicted datapoints for all questionnaires
     for qst in to_plot:
         if qst == 'snap' or qst == 'ssrs':
@@ -269,7 +257,7 @@ def get_timepoints_range(timepoints, delta):
     return  [[time - delta, time + delta] for time in timepoints]
 
 
-def extract_line_plot(df, pred_col_name, type_plot, pnt_av = None,  window = None):
+def extract_line_plot(df, pred_col_name, type_plot, timepoints, delta, pnt_av = None,  window = None):
     
     timepoints_range = get_timepoints_range(timepoints, delta)
     ptn_av = get_point_av(df,pred_col_name, timepoints_range )
@@ -332,7 +320,50 @@ def extract_line_plot(df, pred_col_name, type_plot, pnt_av = None,  window = Non
     print("SMOOTHED shape", smoothed_df.shape)
     return smoothed_df
         
+def perform_rr_analysis(data_dict, interaction_predictors, formulas,raters, outcomes_dict , re_formula = None):
 
+    cols = np.concatenate([['src_subject_id'], interaction_predictors])
+    print(cols)
+    results_s = {}
+    for i, qst in enumerate(qsts) :
+        if qst == 'snap' or qst == 'ssrs':
+            results_rater = {}
+            for rater in raters: 
+                results_ = {}
+                
+                for j, med in enumerate(med_mod_list):
+                    
+                    for k, var in enumerate(outcomes_dict[qst]):
+                        cols_total = np.concatenate([cols, [med, var]])
+                        print(cols_total)
+                        formula = formulas[i][j][k]
+                        data = data_dict[qst][(data_dict[qst]['version_form'] == rater) & (data_dict[qst][cols_total].notna().all(axis=1))]
+                        print(data.shape)
+                        groups = data['src_subject_id']
+                        re_formula = re_formula#"~days_baseline" # alow for random slope per subject 
+                        result = smf.mixedlm(formula, data, groups = groups, re_formula= re_formula).fit()
+                        results_[str(med) + '_' + str(var) ] = result
+                        
+                results_rater[rater] = results_
+                
+            results_s[qst] = results_rater
+        elif qst == 'masc' or qst == 'pc':
+            results_m = {}
+            for i, qst in enumerate(['masc', 'pc']) :
+                results_ = {}
+                for j, med in enumerate(med_mod_list):
+
+                    for k, var in enumerate(outcomes_dict[qst]):
+                        cols_total = np.concatenate([cols, [med, var]])
+                        print(cols_total)
+                        formula = formulas[i+2][j][k]
+                        data = data_dict[qst][cols_total].dropna()
+                        groups = data['src_subject_id']
+                        re_formula = re_formula #"~days_baseline"
+                        result = smf.mixedlm(formula, data, groups = groups, re_formula= re_formula).fit()
+                        results_[str(med) + '_' + str(var) ] = result
+                results_m[qst] = results_
+    return  {'snap': results_s['snap'], 'ssrs' : results_s['ssrs'], 'masc': results_m['masc'], 'pc': results_m['pc'] }
             
             
 
@@ -379,6 +410,95 @@ def perform_contrasts(data, formula, type_contrast, alpha, version_form, bonferr
     
     return p_values, comp_results_str
 
+def get_rr_formulas(gen_interact_formula, med_mod_list, outcomes_dict):
+    #include mediators and moderator as main effect and in interaction 
+    gen_med_formulas = [ gen_interact_formula +' * '+  str(med) for med in med_mod_list]
+    gen_med_formulas
+
+    formulas =  [[[' ~ '.join((var, gen_med_form)) for var in values] for gen_med_form in gen_med_formulas] for values in outcomes_dict.values()] 
+    formulas_dict = dict(zip(outcomes_dict.keys(), formulas))
+    return formulas, formulas_dict
+
+def get_rolling_av(subset, pred_col_name, window):
+    subset_sorted = subset.sort_values('days_baseline')
+# Apply rolling mean across the 'days_baseline'
+    smoothed = subset_sorted[pred_col_name].rolling(window=window, min_periods=1).mean()
+
+    # Ensure the rolling mean values are aligned with the sorted 'days_baseline'
+    smoothed_df = pd.DataFrame({
+        'days_baseline': subset_sorted['days_baseline'],
+        'smoothed_value': smoothed
+    })
+    return smoothed_df
+
+def extract_prediction(results, data_dict, to_plot, raters):
+    # extract predicted datapoints for all questionnaires
+    for qst in to_plot:
+        if qst == 'snap' or qst == 'ssrs':
+            print(qst.upper())
+            for rater in raters:
+                for var_result in results[qst][rater].keys():    
+                    result = results[qst][rater][var_result]
+                    #print(result)
+                    data = data_dict[qst]
+                    data_dict[qst]['predicted_' +  str(var_result) +'_' + str(rater[0])] = result.predict(data) #
+                    
+        elif qst == 'masc' or qst == 'pc':    
+            print(qst.upper())       
+            for var_result in results[qst].keys():
+                data = data_dict[qst]
+                result = results[qst][var_result]
+                data_dict[qst]['predicted_' + str(var_result)] = result.predict(data) 
+        
+                
+                
+
+
+    
+def get_slopes(result, var_mod):
+    intercept = 0 #result.params['Intercept']
+    coeff_var_mod = result.params[var_mod]
+    days_baseline = result.params['days_baseline']
+
+    coeffC = result.params['C(trtname, Treatment(reference="A"))[T.C]:days_baseline']
+    coeffM = result.params['C(trtname, Treatment(reference="A"))[T.M]:days_baseline']
+    coeffP = result.params['C(trtname, Treatment(reference="A"))[T.P]:days_baseline']
+    
+
+    interact_C = result.params['C(trtname, Treatment(reference="A"))[T.C]:{}'.format(var_mod)]
+    interact_M =  result.params['C(trtname, Treatment(reference="A"))[T.M]:{}'.format(var_mod)]
+    interact_P =  result.params['C(trtname, Treatment(reference="A"))[T.P]:{}'.format(var_mod)]
+    
+ 
+
+    no_mod_coeffs = {"P" : coeffP + intercept+ days_baseline,
+                     "M" : coeffM + intercept+ days_baseline,
+                     "C" : coeffC + intercept+ days_baseline, 
+                     'A': intercept + days_baseline}
+
+    
+
+    mod_coeffs =    {"P" : coeffP + interact_P + intercept+ days_baseline,
+                     "M" :  coeffM + interact_M + intercept+ days_baseline,
+                     "C" : coeffC + interact_C + intercept+ days_baseline,
+                     'A': intercept + coeff_var_mod+ days_baseline}
+    
+
+    df_coeffs = pd.DataFrame({
+        'no_mod': no_mod_coeffs,
+        'yes_mod': mod_coeffs
+    })
+
+    df_coeffs.index.name = 'trtname'
+    return df_coeffs
+    
+    
+    
+    
+    
+    
+    
+    
 '''
 def plot_4_point_av_fit(data, var_mod, var_out, med_values, window,  trt_dict , rater = None, show = True, save_path= None):
     print(show, save_path)
