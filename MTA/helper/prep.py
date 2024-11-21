@@ -37,7 +37,7 @@ def get_data(path, columns, treat_group, set_dtypes = True, version_form = False
         print("all columns")
         try : 
             df = pd.read_csv(path, delimiter="\t",  skiprows=[1] , parse_dates=['interview_date']).dropna(subset='days_baseline').drop_duplicates()
-            print(df.shape)
+  
         except Exception as e:
             if str(e) ==  "Missing column provided to 'parse_dates': 'interview_date'":
                 df = pd.read_csv(path, delimiter="\t", skiprows=[1]).dropna(subset='days_baseline').drop_duplicates()
@@ -173,20 +173,20 @@ def get_nonNaN_cols(df):
     
 
 def set_baseline_dtypes(df, dropna = False):
-
+    
     try:
         if df.shape != df.dropna().shape and dropna:
             print('Dropping rows containing NaN. Old shape:  {}, new shape : {}'.format(df.shape, df.dropna().shape))
             df = df.dropna()
             
         df['src_subject_id'] = df['src_subject_id'].astype('str')#df['src_subject_id'].str.strip()
-        df['sex'] = df['sex'].astype('category')
-        df['site'] = df['site'].astype('category')
+        df['sex'] = df['sex'].astype('str')
+        df['site'] = df['site'].astype('str')
         df['interview_date'] = pd.to_datetime(df['interview_date'], format='%m/%d/%Y')
         df[['interview_age', 'days_baseline']] = df[['interview_age',  'days_baseline']].astype(int)
         
         if 'trtname' in df.columns:
-            df['trtname'] = df['trtname'].astype('category')
+            df['trtname'] = df['trtname'].astype('str')
         print('Success')
         return df
     
