@@ -4,6 +4,7 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 from pathlib import Path
 import numpy as np
 from scipy.optimize import curve_fit
+import matplotlib.ticker as ticker
 
 ###################### INSPECT ################################
 def scatter_per_subject(df, var, days_baseline = None, outcomes_dict_fig = None, groupby = 'src_subject_id', x_axis_type = 'days', n_subjects = None, cutoffs = None, plot_L = False, save_path = None):

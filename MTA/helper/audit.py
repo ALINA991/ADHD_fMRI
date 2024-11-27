@@ -4,12 +4,12 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import pandas as pd
 import skrub
-
+import matplotlib.ticker as ticker
 
 from helper import rr, var_dict, prep
 
 
-def find_mean_raw_vs_t_cols(df, cols_to_add=None):
+def find_mean_raw_vs_t_cols(df, cols_to_add=None, cols_known_to_keep = []):
     """
     Identify columns to remove based on specific naming conventions across all columns in a DataFrame.
     
@@ -46,6 +46,7 @@ def find_mean_raw_vs_t_cols(df, cols_to_add=None):
     # Check snaxrsp criteria - add columns with 'snaxrsp' in the name
     if cols_to_add is not None: 
         cols2rem.update(cols_to_add)
+    cols2rem.difference_update(cols_known_to_keep)
     
 
     return list(cols2rem)
@@ -61,6 +62,7 @@ def set_dtypes_and_nan(df, df_info, missing_val_codes, dtype_dict):
     print("Removing subject_unspecific columns ..  N = ", len(subject_unspecific_cols))
     df_clean = df.drop(columns = subject_unspecific_cols)
     df_clean  = df_clean.replace(np.nan, -999)
+    print(df_clean.shape)
     
     print("Setting dtypes..")
 
@@ -68,36 +70,31 @@ def set_dtypes_and_nan(df, df_info, missing_val_codes, dtype_dict):
     col: dtype_dict[df_info.loc[ df_info['ElementName'] == col,'DataType' ].values[0]] for col in df_clean.columns })
 
     df_clean= df_clean.replace([-999, "-999"], np.nan).copy()
-
     return df_clean
     
 
 
-### add a way to select specifi columns where to conversion to NaN does not hapen (e.g. in snap , relationship has value 88 for professional, but elsewhere it is a missing value)
-def pre_audit(df, df_info, missing_val_codes, dtype_dict,  cols_known_to_remove = None, thr_drop_missing = 20):
-    #df_clean = prep.set_baseline_dtypes(df) # set dtypes fro baseline vars
-    df_clean= df.replace(missing_val_codes, np.nan).copy()
 
-    df_clean = set_dtypes_and_nan(df_clean, df_info, missing_val_codes, dtype_dict)    # set dtypes for all, replcace missing vas with NaN
-    print(df_clean.shape)
+def remove_nan_cols(df, cols_known_to_keep ):
+    empty_cols = df.columns[ (df.isna().all(axis = 0)) & (~df.columns.isin(cols_known_to_keep)) ]
+    print(empty_cols)
+    print("Removing empty columns ..  N = ", len(empty_cols))
+    df = df.drop(columns = empty_cols) # drop empty columns 
+    print(df.shape)
+    return df 
 
-    
-    
-    empty_cols = df.isna().all(axis = 1)
-    print("Removing empty columns ..  N = ", empty_cols.sum())
-    df_clean  = df_clean.drop(columns = empty_cols[empty_cols]) # drop empty columns 
+def remove_const_cols(df_clean, cols_known_to_keep):
+    constant_cols = df_clean.columns[ (df_clean.nunique(dropna=True) <= 1) & (~df_clean.columns.isin(cols_known_to_keep))]
+    print("Removing constant columns .. N = ", len(constant_cols))
+
+    df_clean = df_clean.drop(columns= constant_cols)
     print(df_clean.shape)
+    return df_clean
     
-    
-    constant_cols = df_clean.nunique(dropna=True) <= 1
-    print("Removing constant columns .. N = ", constant_cols.sum())
-    df_clean = df_clean.drop(columns=constant_cols[constant_cols].index)
-    print(df_clean.shape)
-    
-    cols2rem = find_mean_raw_vs_t_cols(df_clean, cols_known_to_remove) #find mean and raw columns where t column exist
+def remove_raw_and_know_cols(df_clean, cols_known_to_remove, cols_known_to_keep):
+    cols2rem = find_mean_raw_vs_t_cols(df_clean, cols_known_to_remove, cols_known_to_keep) #find mean and raw columns where t column exist
     print("Removing known and raw columns..  N =  :" , len(cols2rem))
     
-
 
     try:
         df_clean = df_clean.drop(columns = cols2rem) # drop all unwanted columns
@@ -111,11 +108,66 @@ def pre_audit(df, df_info, missing_val_codes, dtype_dict,  cols_known_to_remove 
         print("Success. Removing known and raw columns..  N =  :" , len(cols2rem))
         print(df_clean.shape)
         
+    return df_clean
+    
+def remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep):
+    
     missing_perc = df_clean.isna().mean(axis = 0) * 100 # find columns with too many missing values
-    cols_drop_miss = df_clean.columns[np.where(missing_perc > thr_drop_missing)]
+    cols_drop_miss = set(df_clean.columns[np.where(missing_perc > thr_drop_missing)])
+    cols_drop_miss -= set(cols_known_to_keep)
     print("Removing above threshold empty columns.. N =  :" , len(cols_drop_miss))
     df_clean = df_clean.drop(columns = cols_drop_miss)
     print(df_clean.shape)
+    return df_clean
+    
+    
+    #### verify not in cols2keep 
+    
+
+### check not to remove any cols2keep at all steps 
+### make the pre-audit more modular 
+
+
+### add a way to select specifi columns where to conversion to NaN does not hapen (e.g. in snap , relationship has value 88 for professional, but elsewhere it is a missing value)
+def pre_audit(df, df_info, missing_val_codes, dtype_dict,  cols_known_to_remove = None, cols_known_to_keep = [], thr_drop_missing = 20):
+    #df_clean = prep.set_baseline_dtypes(df) # set dtypes fro baseline vars
+    print('original shape : ', df.shape)
+    df_clean= df.replace(missing_val_codes, np.nan).copy()
+    df_clean = set_dtypes_and_nan(df_clean, df_info, missing_val_codes, dtype_dict)    # set dtypes for all, replcace missing vas with NaN
+    df_clean = remove_nan_cols(df_clean, cols_known_to_keep)
+    df_clean = remove_const_cols(df_clean, cols_known_to_keep)
+    df_clean = remove_raw_and_know_cols(df_clean, cols_known_to_remove, cols_known_to_keep)
+    df_clean = remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep)
+    # constant_cols = df_clean.columns[ (df_clean.nunique(dropna=True) <= 1) & (~df_clean.columns.isin(cols_known_to_keep))]
+    # print("Removing constant columns .. N = ", len(constant_cols))
+
+    # df_clean = df_clean.drop(columns= constant_cols)
+    
+
+    
+    # cols2rem = find_mean_raw_vs_t_cols(df_clean, cols_known_to_remove) #find mean and raw columns where t column exist
+    # print("Removing known and raw columns..  N =  :" , len(cols2rem))
+    
+
+
+    # try:
+    #     df_clean = df_clean.drop(columns = cols2rem) # drop all unwanted columns
+    #     print(df_clean.shape)
+    # except KeyError as e:
+    #     print('    ERROR')
+    #     print(e)
+    #     print("Removing non-existing columns from list .. ")
+    #     cols2rem = [col for col in cols2rem if col in df_clean.columns]
+    #     df_clean = df_clean.drop(columns = cols2rem) # drop all unwanted columns
+    #     print("Success. Removing known and raw columns..  N =  :" , len(cols2rem))
+    #     print(df_clean.shape)
+        
+
+    # missing_perc = df_clean.isna().mean(axis = 0) * 100 # find columns with too many missing values
+    # cols_drop_miss = df_clean.columns[np.where(missing_perc > thr_drop_missing)]
+    # print("Removing above threshold empty columns.. N =  :" , len(cols_drop_miss))
+    # df_clean = df_clean.drop(columns = cols_drop_miss)
+    # print(df_clean.shape)
 
     
     print('Old shape: ', df.shape)
