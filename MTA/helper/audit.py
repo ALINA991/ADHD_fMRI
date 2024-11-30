@@ -121,6 +121,18 @@ def remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep):
     return df_clean
     
     
+    
+######## add function for remving cold without settig dtyes 
+### maybe option to chhoose which ones to remove 
+### a also to print chich ones would be removed 
+
+def remove_cols(df, cols_known_to_remove = [], cols_known_to_keep= [], thr_drop_missing = 50):
+    df_clean = remove_nan_cols(df, cols_known_to_keep)
+    df_clean = remove_const_cols(df_clean, cols_known_to_keep)
+    df_clean = remove_raw_and_know_cols(df_clean, cols_known_to_remove, cols_known_to_keep)
+    df_clean = remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep)
+    return df_clean
+
     #### verify not in cols2keep 
     
 
@@ -134,10 +146,12 @@ def pre_audit(df, df_info, missing_val_codes, dtype_dict,  cols_known_to_remove 
     print('original shape : ', df.shape)
     df_clean= df.replace(missing_val_codes, np.nan).copy()
     df_clean = set_dtypes_and_nan(df_clean, df_info, missing_val_codes, dtype_dict)    # set dtypes for all, replcace missing vas with NaN
-    df_clean = remove_nan_cols(df_clean, cols_known_to_keep)
-    df_clean = remove_const_cols(df_clean, cols_known_to_keep)
-    df_clean = remove_raw_and_know_cols(df_clean, cols_known_to_remove, cols_known_to_keep)
-    df_clean = remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep)
+    df_clean = remove_cols(df_clean, cols_known_to_remove, cols_known_to_keep, thr_drop_missing)
+
+    # df_clean = remove_nan_cols(df_clean, cols_known_to_keep)
+    # df_clean = remove_const_cols(df_clean, cols_known_to_keep)
+    # df_clean = remove_raw_and_know_cols(df_clean, cols_known_to_remove, cols_known_to_keep)
+    # df_clean = remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep)
     # constant_cols = df_clean.columns[ (df_clean.nunique(dropna=True) <= 1) & (~df_clean.columns.isin(cols_known_to_keep))]
     # print("Removing constant columns .. N = ", len(constant_cols))
 
