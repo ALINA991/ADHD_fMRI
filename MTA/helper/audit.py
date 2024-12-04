@@ -51,25 +51,43 @@ def find_mean_raw_vs_t_cols(df, cols_to_add=None, cols_known_to_keep = []):
 
     return list(cols2rem)
 
-def set_dtypes_and_nan(df, df_info, missing_val_codes, dtype_dict):
-    # these columns are not present in the info files 
-    if df['src_subject_id'].iloc[0] == 'Subject ID how it\'s defined in lab/project': #check whether description line exists 
-        df = df.drop(0, axis = 0)
-        
+def set_dtypes_and_nan(df, df_info, missing_val_codes, dtype_dict, cols_known_to_keep=[]):
+    # Check for description line and drop it
+    if df['src_subject_id'].iloc[0] == 'Subject ID how it\'s defined in lab/project':
+        df = df.drop(0, axis=0)
+
+    # Identify subject-unspecific columns
     subject_unspecific_cols = [col for col in df.columns if col not in df_info['ElementName'].tolist()]
-    subject_unspecific_cols.append('interview_date')
-    
-    print("Removing subject_unspecific columns ..  N = ", len(subject_unspecific_cols))
-    df_clean = df.drop(columns = subject_unspecific_cols)
-    df_clean  = df_clean.replace(np.nan, -999)
+
+    if 'interview_date' in df.columns:
+        subject_unspecific_cols.append('interview_date')
+
+    # Ensure known-to-keep columns are not removed
+    if cols_known_to_keep:
+        subject_unspecific_cols = [col for col in subject_unspecific_cols if col not in cols_known_to_keep]
+
+    print("Removing subject-unspecific columns ..  N = ", len(subject_unspecific_cols))
+    print(subject_unspecific_cols)
+    df_clean = df.drop(columns=subject_unspecific_cols, errors='ignore')  # `errors='ignore'` ensures no error if columns are missing
+    df_clean = df_clean.replace(np.nan, -999)
+
     print(df_clean.shape)
-    
-    print("Setting dtypes..")
 
-    df_clean = df_clean.astype({
-    col: dtype_dict[df_info.loc[ df_info['ElementName'] == col,'DataType' ].values[0]] for col in df_clean.columns })
+    # Set data types
+    print("Setting dtypes...")
+    for col in df_clean.columns:
+        if col in dtype_dict and col in df_info['ElementName'].tolist():
+            try:
+                dtype = dtype_dict[df_info.loc[df_info['ElementName'] == col, 'DataType'].values[0]]
+                df_clean[col] = df_clean[col].astype(dtype)
+            except (IndexError, ValueError, TypeError) as e:
+                print(f"Error converting column {col}: {e}")
+        elif col in cols_known_to_keep:
+            print(f"Skipping type conversion for column {col} as it's not in info dictionary.")
 
-    df_clean= df_clean.replace([-999, "-999"], np.nan).copy()
+    # Replace missing value codes back to NaN
+    df_clean = df_clean.replace([-999, "-999"], np.nan).copy()
+
     return df_clean
     
 
@@ -79,6 +97,7 @@ def remove_nan_cols(df, cols_known_to_keep ):
     empty_cols = df.columns[ (df.isna().all(axis = 0)) & (~df.columns.isin(cols_known_to_keep)) ]
     print(empty_cols)
     print("Removing empty columns ..  N = ", len(empty_cols))
+    print(empty_cols)
     df = df.drop(columns = empty_cols) # drop empty columns 
     print(df.shape)
     return df 
@@ -86,6 +105,7 @@ def remove_nan_cols(df, cols_known_to_keep ):
 def remove_const_cols(df_clean, cols_known_to_keep):
     constant_cols = df_clean.columns[ (df_clean.nunique(dropna=True) <= 1) & (~df_clean.columns.isin(cols_known_to_keep))]
     print("Removing constant columns .. N = ", len(constant_cols))
+    print(constant_cols)
 
     df_clean = df_clean.drop(columns= constant_cols)
     print(df_clean.shape)
@@ -94,6 +114,7 @@ def remove_const_cols(df_clean, cols_known_to_keep):
 def remove_raw_and_know_cols(df_clean, cols_known_to_remove, cols_known_to_keep):
     cols2rem = find_mean_raw_vs_t_cols(df_clean, cols_known_to_remove, cols_known_to_keep) #find mean and raw columns where t column exist
     print("Removing known and raw columns..  N =  :" , len(cols2rem))
+    print(cols2rem)
     
 
     try:
@@ -106,6 +127,7 @@ def remove_raw_and_know_cols(df_clean, cols_known_to_remove, cols_known_to_keep)
         cols2rem = [col for col in cols2rem if col in df_clean.columns]
         df_clean = df_clean.drop(columns = cols2rem) # drop all unwanted columns
         print("Success. Removing known and raw columns..  N =  :" , len(cols2rem))
+        print(cols2rem)
         print(df_clean.shape)
         
     return df_clean
@@ -116,6 +138,7 @@ def remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep):
     cols_drop_miss = set(df_clean.columns[np.where(missing_perc > thr_drop_missing)])
     cols_drop_miss -= set(cols_known_to_keep)
     print("Removing above threshold empty columns.. N =  :" , len(cols_drop_miss))
+    print(cols_drop_miss)
     df_clean = df_clean.drop(columns = cols_drop_miss)
     print(df_clean.shape)
     return df_clean
@@ -133,11 +156,10 @@ def remove_cols(df, cols_known_to_remove = [], cols_known_to_keep= [], thr_drop_
     df_clean = remove_thr_empty_cols(df_clean, thr_drop_missing, cols_known_to_keep)
     return df_clean
 
-    #### verify not in cols2keep 
+
     
 
-### check not to remove any cols2keep at all steps 
-### make the pre-audit more modular 
+
 
 
 ### add a way to select specifi columns where to conversion to NaN does not hapen (e.g. in snap , relationship has value 88 for professional, but elsewhere it is a missing value)
@@ -145,7 +167,7 @@ def pre_audit(df, df_info, missing_val_codes, dtype_dict,  cols_known_to_remove 
     #df_clean = prep.set_baseline_dtypes(df) # set dtypes fro baseline vars
     print('original shape : ', df.shape)
     df_clean= df.replace(missing_val_codes, np.nan).copy()
-    df_clean = set_dtypes_and_nan(df_clean, df_info, missing_val_codes, dtype_dict)    # set dtypes for all, replcace missing vas with NaN
+    df_clean = set_dtypes_and_nan(df_clean, df_info, missing_val_codes, dtype_dict, cols_known_to_keep)    # set dtypes for all, replcace missing vas with NaN
     df_clean = remove_cols(df_clean, cols_known_to_remove, cols_known_to_keep, thr_drop_missing)
 
     # df_clean = remove_nan_cols(df_clean, cols_known_to_keep)
@@ -192,6 +214,34 @@ def pre_audit(df, df_info, missing_val_codes, dtype_dict,  cols_known_to_remove 
     print("\n")
     
     return df_clean
+
+
+def audit():
+    # pre audit 
+
+        # verify activate status of patients 
+    
+    # map relationship 
+    
+    #get timepoint 
+    
+    # extract data per rater 
+    
+    # handle duplicate raters
+        # drop 
+        
+        # first occurance 
+        
+        # average 
+        
+    # merge
+    
+        #raters
+        
+        # qsts 
+    
+    
+    pass
 
 def verifiy_pre_audit(df_clean, missing_val_codes):
     x_columns = [col for col in df_clean.columns if col.endswith('x')]
