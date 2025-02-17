@@ -3,11 +3,16 @@ import ast
 import pandas as pd 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
+from decimal import Decimal, ROUND_DOWN
 
 
 # ----------------------------
 # Custom Transformers
-# ----------------------------
+# ------------------------
+def truncate(value, decimals):
+    value = Decimal(value)
+    return float(value.quantize(Decimal(f"1.{'0' * decimals}"), rounding=ROUND_DOWN))
+
 
 
 
@@ -50,7 +55,7 @@ def get_params_from_best_result(file_path_save):
 
     # thr_corr = params['subsample']
     # params.pop('subsample', None)
-    return  model_type,  corr_select,   thr_corr, params,  col_out_reduced, rater_pred, thr_drop_missing
+    return  model_type,  corr_select,   thr_corr, params,  col_out_reduced, rater_pred, thr_drop_missing, original_r2.iloc[0]
 
 
 def get_data_types_from_file(data, types_file_path, sheet_name ):
@@ -61,11 +66,10 @@ def get_data_types_from_file(data, types_file_path, sheet_name ):
     types_df = pd.read_excel(types_file_path, sheet_name=sheet_name)
 
     for _, row in types_df.iterrows():
-        var_name = row[1]  # e.g. variable name in the spreadsheet
-        var_type = row[4]  # e.g. "ord" / "num" / "cat"
+        var_name = row.iloc[1]  # e.g. variable name in the spreadsheet
+        var_type = row.iloc[4]  # e.g. "ord" / "num" / "cat"
+        var_in_data = [col for col in col_names_data if var_name+"_" in col] # add underscore to ensure exact match
 
-        # Collect all columns in `data` that contain `var_name`
-        var_in_data = [col for col in col_names_data if var_name in col]
 
         if var_type == "ord":
             ord_vars.append(var_in_data)
@@ -73,12 +77,13 @@ def get_data_types_from_file(data, types_file_path, sheet_name ):
             num_vars.append(var_in_data)
         elif var_type == "cat":
             cat_vars.append(var_in_data)
-
+   
     # Example: manually add a column named 'trtname' to cat_vars
     cat_vars.append(['trtname'])
+ 
 
     # Flatten each list-of-lists into a single array
-    ord_vars = np.concatenate(ord_vars)
+    ord_vars= np.concatenate(list(ord_vars))
     cat_vars = np.concatenate(cat_vars)
     num_vars = np.concatenate(num_vars)
 
