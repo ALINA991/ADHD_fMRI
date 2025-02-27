@@ -1,0 +1,9 @@
+{
+    "outcome" : [ "ODD", "HYP", "INATT", "INTERN", "SS", "DOM", "INTIM"],
+    "rater_out" : [ "m", "f", "t"],  
+    "rater_pred" : [null, "m", "f", "t"],
+    "model_type": [ "RandomForestRegressor", "XGBRegressor"],
+    "corr_select": [false, true],
+    "thr_drop_row" : [50, 20],
+    "verify_before_save" : true
+}

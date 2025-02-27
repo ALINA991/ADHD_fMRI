@@ -76,13 +76,13 @@ def set_dtypes_and_nan(df, df_info, missing_val_codes, dtype_dict, cols_known_to
     # Set data types
     print("Setting dtypes...")
     for col in df_clean.columns:
-        if col in dtype_dict and col in df_info['ElementName'].tolist():
+        if  col in df_info['ElementName'].tolist(): #col in dtype_dict and
             try:
                 dtype = dtype_dict[df_info.loc[df_info['ElementName'] == col, 'DataType'].values[0]]
                 df_clean[col] = df_clean[col].astype(dtype)
             except (IndexError, ValueError, TypeError) as e:
                 print(f"Error converting column {col}: {e}")
-        elif col in cols_known_to_keep:
+        elif col in cols_known_to_keep and col not in col in df_info['ElementName'].tolist():
             print(f"Skipping type conversion for column {col} as it's not in info dictionary.")
 
     # Replace missing value codes back to NaN
@@ -304,4 +304,6 @@ def rem_top_assoss(df, user_input = False):
 
 
             
-        
+def remove_duplicates(df, col_to_check, keep = False): # keep first occurance of duplicate if set to True
+    df = df.loc[~df[col_to_check].duplicated(keep=keep), :]
+    return df
