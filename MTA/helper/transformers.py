@@ -2,6 +2,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin
 from sklearn.preprocessing import FunctionTransformer
 import numpy as np 
+import dcor
 
 
 class PreserveFeatureNamesRegressor(BaseEstimator, RegressorMixin):
@@ -27,18 +28,43 @@ class PreserveFeatureNamesRegressor(BaseEstimator, RegressorMixin):
 class PreserveFeatureNames(BaseEstimator, TransformerMixin):
     def __init__(self, transformer):
         self.transformer = transformer
+        self.feature_names_out_ = None
 
     def fit(self, X, y=None):
+        # Fit the underlying transformer
         self.transformer.fit(X, y)
-        self.feature_names_in_ = list(X.columns) if hasattr(X, 'columns') else None
+
+        # If the underlying transformer knows how to provide expanded names...
+        if hasattr(self.transformer, "get_feature_names_out"):
+            # If X has columns, pass them as input_features
+            # Otherwise, pass None
+            input_features = list(X.columns) if hasattr(X, "columns") else None
+            try:
+                self.feature_names_out_ = self.transformer.get_feature_names_out(input_features)
+            except TypeError:
+                # Some transformers only accept no arguments
+                self.feature_names_out_ = self.transformer.get_feature_names_out()
+        else:
+            # Fall back to the original columns (or None) if no name method is available
+            if hasattr(X, "columns"):
+                self.feature_names_out_ = list(X.columns)
+            else:
+                # If X isn't a DataFrame, we only know how many columns there are after transform
+                self.feature_names_out_ = None
+
         return self
 
     def transform(self, X):
         return self.transformer.transform(X)
 
     def get_feature_names_out(self, input_features=None):
-        return self.feature_names_in_ if input_features is None else input_features
-
+        # If we successfully extracted real names, return them
+        if self.feature_names_out_ is not None:
+            return self.feature_names_out_
+        else:
+            # Otherwise, we might do a shape-based placeholder,
+            # but typically it's best to rely on the transformer's own method
+            return input_features if input_features is not None else []
 # ----------------------------
 # Custom Transformers
 # ----------------------------
@@ -86,3 +112,45 @@ class CorrelationSelector(BaseEstimator, TransformerMixin):
             input_features = self.feature_names_in_
         return [feat for feat in input_features if feat in self.features_to_keep_]
 
+
+class LeastDistanceCorrelatedRandomFeature(BaseEstimator, TransformerMixin):
+    def __init__(self, n_candidates=20, random_state=None, feature_name="rand_feature"):
+        self.n_candidates = n_candidates
+        self.random_state = random_state
+        self.feature_name = feature_name
+        
+    def fit(self, X, y=None):
+        if y is None:
+            raise ValueError("Target vector y must be provided to compute distance correlation.")
+            
+        rng = np.random.RandomState(self.random_state)
+        n_samples = X.shape[0]
+        
+        best_dcorr = np.inf
+        best_vector = None
+        
+        for _ in range(self.n_candidates):
+            candidate = rng.normal(size=n_samples)
+            d_corr = dcor.distance_correlation(candidate, y)
+            if np.isnan(d_corr):
+                d_corr = np.inf
+            if d_corr < best_dcorr:
+                best_dcorr = d_corr
+                best_vector = candidate
+        print(d_corr)
+        # Instead of storing the candidate itself, store its mean and std
+        self.best_mean_ = np.mean(best_vector)
+        self.best_std_ = np.std(best_vector)
+        return self
+
+    def transform(self, X):
+        n = X.shape[0]
+        # Generate a new random vector with the same distribution as the best candidate from fit
+        new_rand = np.random.normal(loc=self.best_mean_, scale=self.best_std_, size=n)
+
+        if hasattr(X, "assign"):
+            X_new = X.copy()
+            X_new[self.feature_name] = new_rand
+            return X_new
+        else:
+            return np.hstack([X, new_rand.reshape(-1, 1)])

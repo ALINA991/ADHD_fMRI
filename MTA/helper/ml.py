@@ -8,6 +8,9 @@ from helper import audit
 import os 
 
 
+def make_pipeline():
+    pass
+
 def get_support_data(pipeline):
     # Define the extensions to check
     extensions = ['m', #mother 
@@ -45,12 +48,19 @@ def format_dict_to_text(data_dict): # get support data as formated text for resu
     formatted_text = "\n".join(lines)
     return formatted_text
 
-def get_results_from_random_search(random_search, outcome_short, rater_out,rater_pred,  thr_drop_missing ):
+def get_results_from_random_search(random_search, outcome_short, rater_out,rater_pred,  thr_drop_missing, get_dist = False ):
     
-    cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
+    if get_dist:
+        cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
+        'Mean Squared Error Distribution', 'Root Mean Squared Error Distribution', 'Mean Absolute Error Distribution',
+        'R² Score Distribution', 'Outcome Variable',  'Number of Features',
+        'Feature Selection Method', 'Threshold Drop Row']
+    else:
+        cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
         'Mean Squared Error', 'Root Mean Squared Error', 'Mean Absolute Error',
         'R² Score', 'Outcome Variable',  'Number of Features',
         'Feature Selection Method', 'Threshold Drop Row']
+    
 
     outcome_result_dict = {'ODD':  "SNAP ODD Symptoms T Score", "HYP": "SNAP Hyperactivity Symptoms T Score", "INATT" :"SNAP Inattention Symptoms T Score" , "INTERN": "SSRS Internalizing Symptoms", "SS": "SSRS Social Skills T Score", "DOM": "Parental Dominance Mean Score", "INTIM": "Parent-Child Intimacy Mean Score"}
 
@@ -63,7 +73,8 @@ def get_results_from_random_search(random_search, outcome_short, rater_out,rater
     
     outcome_table = outcome_result_dict[outcome_short] + "\n- rated  by {}".format(rater_dict[rater_out])
     
-    results_df = pd.DataFrame(random_search.cv_results_)
+    cv_results = random_search.cv_results_
+    results_df = pd.DataFrame(cv_results)
     cross_val_strategy = str(random_search.cv)
 
     best_index = random_search.best_index_
@@ -79,12 +90,22 @@ def get_results_from_random_search(random_search, outcome_short, rater_out,rater
 
     print("Metrics for Best Parameters:")
     print(best_results[['mean_test_rmse', 'mean_test_mae', 'mean_test_r2']])
+    
+    if get_dist:
+        n_splits = max(int(key.split('_')[0].replace("split", "")) 
+                for key in random_search.cv_results_.keys() 
+                if key.startswith("split")) + 1
+        
+        r2 = [cv_results[f"split{i}_test_r2"][best_index] for i in range(n_splits)]
+        mae = [cv_results[f"split{i}_test_mae"][best_index] for i in range(n_splits)]
+        mse = [cv_results[f"split{i}_test_rmse"][best_index] ** 2 for i in range(n_splits)]
+        rmse = [cv_results[f"split{i}_test_rmse"][best_index] for i in range(n_splits)]
 
-
-    rmse = - truncate(best_results['mean_test_rmse'], 4)
-    mse =  truncate(best_results['mean_test_rmse'] ** 2, 4)
-    mae = - truncate(best_results['mean_test_mae'], 4)
-    r2 = truncate(best_results['mean_test_r2'], 4)
+    else: 
+        rmse = - truncate(best_results['mean_test_rmse'], 4)
+        mse =  truncate(best_results['mean_test_rmse'] ** 2, 4)
+        mae = - truncate(best_results['mean_test_mae'], 4)
+        r2 = truncate(best_results['mean_test_r2'], 4)
 
 
     model_name = best_pipeline.named_steps['regressor'].__class__.__name__
@@ -193,21 +214,66 @@ def rater_count(data):
         print(f"Columns ending with '{ext}': {count}")
     return clean_extension_counts
     
+def parse_formatted_text_to_dict(formatted_text):
+    """
+    Parses the formatted text (e.g., created by format_dict_to_text) back into a dictionary.
     
+    Expects lines of the form:
+        Key: Value
+    where Value is assumed to be an integer. Adjust parsing if the values can be non-integer.
+    """
+    data_dict = {}
+    lines = formatted_text.strip().split('\n')
+    for line in lines:
+        # Split the line into key and value on the first ': '
+        parts = line.split(': ', 1)
+        if len(parts) == 2:
+            key, value_str = parts
+            key = key.strip()
+            # Convert value to integer; adjust if you need floats or strings
+            try:
+                value = int(value_str)
+            except ValueError:
+                # Handle non-integer values if necessary
+                value = value_str
+            data_dict[key] = value
 
-def get_params_from_best_result(file_path_save): 
+    return data_dict
 
+def get_params_from_result(file_path_save, how= "best", index = None): 
+ ######### change arams t fit new table columns 
+ 
+    file_name_save = str(file_path_save).split("/")[-1]
+    rater_dict_rev = {"Mother": "m", 
+                     "Father": "f", 
+                     "Teacher": "t", 
+                     "All Raters": None}
+
+    outcome_dict = {'ODD':  "snap_snaoddt", "HYP": "snap_snahypat", "INATT" :"snap_snainatt" , "INTERN": "ssrs_sspintt", "SS": "ssrs_ssptosst", "DOM": "pcrc_pcrcpax", "INTIM": "pcrc_pcrcprx"}
 
     df_result  = pd.read_csv(file_path_save)
 
-    best_result = df_result.loc[df_result['R² Score'] == df_result['R² Score'].max(), :].drop(columns='Unnamed: 0')
+    if how == "best":
+        print("Extracting best result...")
+        result = df_result.loc[df_result['R² Score'] == df_result['R² Score'].max(), :].drop(columns='Unnamed: 0')
+        
+    elif how == 'index':
+        print("Extracting result at index {} ...".format(index))
+        result = df_result.iloc[[index], :].drop(columns='Unnamed: 0')
 
-
-    params = ast.literal_eval(best_result['Hyperparameters'].iloc[0])
-    model_type = best_result['Model Name'].iloc[0]
-    col_out = best_result['Outcome Variable'].iloc[0]
-    rater_pred = best_result['Input Data'].iloc[0].lower()
-    corr_select=  best_result['Feature Selection Method'].iloc[0]
+    else: 
+        raise ValueError("Result to extract not specified..")
+    
+        
+    params = parse_formatted_text_to_dict(result['Hyperparameters'].iloc[0])
+    model_type =result['Model Name'].iloc[0]
+    out_str  = result["Outcome Variable"].iloc[0]
+    out_str.split("\n")[1].split(" ")[-1]
+    outcome_var = outcome_dict[file_name_save.split(".")[0].split("_")[-1]]
+    rater_out = rater_dict_rev[out_str.split("\n")[-1].split(" ")[-1]]
+    
+    rater_pred = rater_dict_rev[parse_formatted_text_to_dict(result['Number of Features'].iloc[0])["Selection"].strip()]
+    corr_select=  result['Feature Selection Method'].iloc[0]
 
     if corr_select.startswith('correlation_selector'):
         name_part, dict_part = corr_select.split(' ', 1)
@@ -215,18 +281,21 @@ def get_params_from_best_result(file_path_save):
     else: 
         thr_corr = None
         
+    corr_select = True if corr_select.startswith('correlation_selector') else False
+        
     if rater_pred == 'all':
         rater_pred = None
 
-    thr_drop_missing = best_result['Threshold Drop Row'].iloc[0]
-    original_r2 = best_result['R² Score']
+    thr_drop_missing = result['Threshold Drop Row'].iloc[0]
+    original_r2 = result['R² Score']
 
-    col_out_reduced= col_out[:-4]
+
     print("original r2 result : ", original_r2.iloc[0])
-    print('model type', model_type)
+    print('model_type', model_type)
     print('corr_select :', corr_select)
     print("thr_corr: ", thr_corr )
-    print('outcome : ', col_out_reduced)
+    print('outcome : ',outcome_var)
+    print("rater out", rater_out)
     print('rater input data : ', rater_pred)
     print("thr drop missing: ", thr_drop_missing)
     print("params model : ", params)
@@ -234,55 +303,9 @@ def get_params_from_best_result(file_path_save):
 
     # thr_corr = params['subsample']
     # params.pop('subsample', None)
-    return  model_type,  corr_select,   thr_corr, params,  col_out_reduced, rater_pred, thr_drop_missing, original_r2.iloc[0]
+    return  model_type,  corr_select,   thr_corr, params,  outcome_var,rater_out, rater_pred, thr_drop_missing, original_r2.iloc[0]
 
 
-# def get_data_types_from_file(data, types_file_path, sheet_name ):
-#     col_names_data = list(data.columns)
-
-#     ord_vars, num_vars, cat_vars = [], [], []
-
-#     types_df = pd.read_excel(types_file_path, sheet_name=sheet_name)
-
-#     for _, row in types_df.iterrows():
-#         var_name = row.iloc[1]  # e.g. variable name in the spreadsheet
-#         var_type = row.iloc[4]  # e.g. "ord" / "num" / "cat"
-#         var_in_data = [col for col in col_names_data if var_name + "_" in col] # add underscore to ensure exact match
-
-
-#         if var_type == "ord":
-#             ord_vars.append(var_in_data)
-#         elif var_type == "num":
-#             num_vars.append(var_in_data)
-#         elif var_type == "cat":
-#             cat_vars.append(var_in_data)
-   
-#     # Example: manually add a column named 'trtname' to cat_vars
-#     cat_vars.append(['trtname'])
- 
-
-#     # Flatten each list-of-lists into a single array
-#     ord_vars= np.concatenate(list(ord_vars))
-#     cat_vars = np.concatenate(cat_vars)
-#     num_vars = np.concatenate(num_vars)
-
-#     # Convert them to plain Python strings
-#     ord_vars = [str(col) for col in ord_vars]
-#     cat_vars = [str(col) for col in cat_vars]
-#     num_vars = [str(col) for col in num_vars]
-    
-#     if 'masc_ma22acx_c' in ord_vars: 
-#         ord_vars.remove('masc_ma22acx_c')
-#     if 'masc_ma31hfx_c' in ord_vars:
-#         ord_vars.remove('masc_ma31hfx_c')
-
-#     print("Ordinal vars:", ord_vars)
-#     print("Numeric vars:", num_vars)
-#     print("Categorical vars:", cat_vars)
-
-#     num_vars_in = [str(col) for col in num_vars if not col.endswith("out")] # name of numerical variables present in dataframe X (excludin var names in y)
-    
-#     return ord_vars, cat_vars, num_vars, num_vars_in
 
 def check_overlap(**kwargs):
     print("\n Checking for overlaps.. ")
@@ -311,26 +334,7 @@ def check_overlap(**kwargs):
         
 def prepare_data(pred, out, rater_pred, rater_out, thr_drop_missing, outcome_var):
     print("\nPreparing data...")
-    """
-    Prepares feature (df_X) and target (y) dataframes by filtering prediction and outcome data,
-    merging them, and processing columns.
 
-    Parameters:
-      pred (pd.DataFrame): DataFrame containing prediction data.
-      out (pd.DataFrame): DataFrame containing outcome data.
-      rater_pred (str or None): Suffix to filter prediction columns. If None, no filtering is applied.
-      rater_out (str): Suffix to filter outcome columns.
-      thr_drop_missing (float/int): Threshold for dropping columns via audit.remove_cols.
-      file_name_save (str): Filename string used to extract outcome identifier.
-      out_dict (dict): Dictionary mapping short outcome names to full outcome names.
-      audit (module/object): Contains the remove_cols function to drop columns based on missing values.
-
-    Returns:
-      df_X (pd.DataFrame): Features DataFrame.
-      y (np.ndarray): Array of target values.
-    """
-    
-    # Filter prediction columns if a rater suffix is provided
     if rater_pred is not None:
         col_pred = [col for col in pred.columns if col.endswith(rater_pred) or col.endswith("c")]
         col_pred.append("src_subject_id")
