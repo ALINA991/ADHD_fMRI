@@ -32,6 +32,9 @@ from helper.pipeline import make_pipeline
 
 mpl.rcParams['text.usetex'] = False
 
+from sklearn import set_config # set6 output of each ste of the pipeline to be dataframes
+set_config(transform_output="pandas") # to track feature names 
+
 import json
 from itertools import product
 import argparse
@@ -55,6 +58,7 @@ with open(args.config, 'r') as f:
 # right now check happens after loop 
 
 for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_missing in product(config["outcome"], config["rater_out"], config["rater_pred"], config["model_type"], config["corr_select"], config["thr_drop_row"]):
+    
     print(f"Running script with outcome: {outcome_short},\n"
         f"rater out: {rater_out},\n"
         f"rater pred: {rater_pred},\n"
@@ -64,6 +68,7 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
     
     thr_drop_missing = int(thr_drop_missing)
     rater_pred = None if rater_pred == "None" else rater_pred
+    
     
 
     outcome_dict = {'ODD':  "snap_snaoddt", "HYP": "snap_snahypat", "INATT" :"snap_snainatt" , "INTERN": "ssrs_sspintt", "SS": "ssrs_ssptosst", "DOM": "pcrc_pcrcpax", "INTIM": "pcrc_pcrcprx"}
@@ -83,7 +88,12 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
     types_file_path = Path(data_derived,"all_vars_description_ML.xlsx" ) # deescription of variables aas ordinal, numeric or categorical 
     file_path_save_mean = Path(save_path, file_name_save) # path to save and load ML resluts tabke 
     file_path_save_dist= Path(save_path, file_name_save_dist) 
+    
+    # result_exists = ml.find_result_in_file(file_path_save_mean, model_type, corr_select,thr_drop_missing , rater_pred, rater_out)
 
+
+    # if result_exists: # if result exists in file, skip loop 
+    #     continue
     ################## DATA ####################
     pred = pd.read_csv(Path(data_derived, 'mta_data_clean.csv')).drop(columns = 'Unnamed: 0')
     out = pd.read_csv(Path(data_derived, 'out_clean_all_raters.csv')).drop(columns = 'Unnamed: 0')

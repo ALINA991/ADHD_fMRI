@@ -6,10 +6,76 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from decimal import Decimal, ROUND_DOWN
 from helper import audit
 import os 
+import re 
+
+def rater_matches(table_value,rater):
+
+    rater_lower = rater.lower()
+    value_lower = table_value.lower()
+    return rater_lower in  value_lower
+
+def feature_selection_matches(table_value, corr_select):
+    """
+    Check if the table's Feature Selection Method text matches the expected flag.
+    If corr_select is True, the text must indicate correlation selection.
+    If False, it must indicate no/insufficient feature selection.
+    """
+    value_lower = table_value.lower()
+    if corr_select:
+        return "correlation selector" in value_lower
+    else:
+        # Here we assume that if not using correlation selector, 
+        # the text indicates no feature selection (or "enough feature selection")
+        return ("no feature selection" in value_lower)
 
 
-def make_pipeline():
-    pass
+######### this function ode snot work properly 
+def find_result_in_file(file_path_save, model_type, corr_select, thr_drop_row, rater_pred, rater_out):
+    
+    rater_dict = {
+        "m": "Mother", 
+        "f": "Father", 
+        "t": "Teacher", 
+        "all" : "All Raters"
+    }
+    
+    if not os.path.exists(file_path_save):
+        print("File not found")
+        return False
+    print("Reading file... ")
+    df = pd.read_csv(file_path_save)
+
+    required_columns = [
+        'Model Name', 'Feature Selection Method', 
+        'Threshold Drop Row', 'Number of Features', 'Outcome Variable'
+    ]
+    
+    if not all(col in df.columns for col in required_columns):
+        print("Columns do not match ")
+        return False
+    
+    if corr_select:
+        feature_select_meth ='Correlation Selector'
+        print(feature_select_meth)
+    else: feature_select_meth = 'No feature selection'
+    # Extract the rater from the "Number of Features" column
+    rater_pred_ = rater_pred if rater_pred is not None else "all"
+    rater_pred = "Selection : {}".format(rater_dict[rater_pred_])
+    rater_out = rater_dict[rater_out]
+    
+
+    match = df[
+        (df['Model Name'] == model_type) &
+        (df['Feature Selection Method'] == feature_select_meth) &
+        (df["Threshold Drop Row"] == thr_drop_row) &
+        (df['Outcome Variable'].apply(lambda x: rater_matches(x, rater_out))) &
+        (df['Number of Features'].apply(lambda x: rater_matches(x, rater_pred)))
+    ]
+    if not match.empty:
+        print("\nResults already exists in file.. ")
+        print("Skipping ...\n")
+
+    return not match.empty
 
 def get_support_data(pipeline):
     # Define the extensions to check

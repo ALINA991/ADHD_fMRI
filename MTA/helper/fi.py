@@ -1,16 +1,21 @@
+import numpy as np
 import pandas as pd
-import numpy as np 
-import shapely
+import shap
+from sklearn.model_selection import GroupKFold
+from sklearn.metrics import r2_score
+from sklearn.inspection import permutation_importance
 
+from sklearn import set_config
 
+set_config(transform_output="pandas") # keep output of each step as dataframe to preserve column (feature) names 
 
-
-def get_fi_from_model(pipeline, df_X, y):
+def get_fi_from_model(pipeline, df_X, y, fitted = False):
     model_type = pipeline.named_steps["regressor"].__class__.__name__
-    if model_type == "RandomForestRegressor":
+    if not fitted:
         pipeline.fit(df_X, y)
+    if model_type == "RandomForestRegressor":
         
-        feature_names = pipeline.named_steps['preprocessor'].get_feature_names_out()
+        feature_names =  pipeline[:-1].get_feature_names_out()
 
         rf_step = pipeline.named_steps['regressor']
         importances = rf_step.feature_importances_
@@ -24,7 +29,7 @@ def get_fi_from_model(pipeline, df_X, y):
         
         booster = xgb_regressor.get_booster()
         gain_importances_dict = booster.get_score(importance_type='gain')
-        feature_names = pipeline.named_steps['preprocessor'].get_feature_names_out()
+        feature_names = pipeline[:-1].get_feature_names_out()
 
 
         feature_map = {f"f{i}": feature_names[i] for i in range(len(feature_names))}
@@ -42,7 +47,7 @@ def get_fi_from_model(pipeline, df_X, y):
     return fi_df
 
 
-def get_fi_from_shap(pipeline, df_X, y):
+def get_fi_from_shap(pipeline, df_X, y, fitted = False):
     """
     Fits the pipeline on (df_X, y), computes SHAP values using a TreeExplainer (if the regressor
     is tree-based) and returns a DataFrame with columns ['feature', 'importance'].
@@ -52,12 +57,12 @@ def get_fi_from_shap(pipeline, df_X, y):
     otherwise, a generic explainer can be used.
     """
     # Fit the pipeline on all data.
-    pipeline.fit(df_X, y)
+    if not fitted:
+        pipeline.fit(df_X, y)
     
     # Get the transformed features and their names from the preprocessor.
-    X_trans = pipeline.named_steps['preprocessor'].transform(df_X)
-    feature_names = pipeline.named_steps['preprocessor'].get_feature_names_out()
-    
+    X_trans = pipeline[:-1].transform(df_X)
+    feature_names = pipeline[:-1].get_feature_names_out()
     # Identify the model type.
     model_type = pipeline.named_steps["regressor"].__class__.__name__
     
@@ -79,20 +84,22 @@ def get_fi_from_shap(pipeline, df_X, y):
     # Create a DataFrame of feature importances.
     fi_df = pd.DataFrame({
         'feature': feature_names,
-        'importance': importances
+        'importance': importances,
     }).sort_values('importance', ascending=False)
+    shap_df = pd.DataFrame(shap_values, columns=feature_names)
     
-    return fi_df
+    return fi_df, shap_df, explainer
 
 
-def get_fi_from_perm(pipeline, df_X, y, n_repeats=5):
+def get_fi_from_perm(pipeline, df_X, y, n_repeats=5, fitted = False):
     """
     Fits the pipeline on (df_X, y), then computes permutation importance (scoring='r2').
     Returns a DataFrame with columns ['feature', 'importance'],
     sorted by 'importance' (descending).
     """
     # Fit the entire pipeline
-    pipeline.fit(df_X, y)
+    if not fitted:
+        pipeline.fit(df_X, y)
 
     # Compute permutation importance on the same data
     result = permutation_importance(
@@ -103,10 +110,10 @@ def get_fi_from_perm(pipeline, df_X, y, n_repeats=5):
         scoring='r2',
         random_state=42
     )
-    importances = result.importances_mean
+    importances = result.importances_mean # do averaging over performance 
 
     # Get feature names from the preprocessor step
-    feature_names = pipeline.named_steps['preprocessor'].get_feature_names_out()
+    feature_names = pipeline[:-1].get_feature_names_out()
 
     # Build a DataFrame mirroring the structure of get_fi_from_model()
     fi_df = pd.DataFrame({

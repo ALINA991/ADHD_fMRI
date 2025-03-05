@@ -4,7 +4,25 @@ from sklearn.preprocessing import FunctionTransformer
 import numpy as np 
 import dcor
 
+from skrub import TableVectorizer
 
+
+class DataFrameToNumpy(BaseEstimator, TransformerMixin):
+    """Custom transformer to convert a pandas DataFrame to a NumPy array."""
+
+    def fit(self, X, y=None):
+        return self  # No fitting required
+
+    def transform(self, X):
+        if hasattr(X, "to_numpy"):  # Check if X is a DataFrame
+            return X.to_numpy()
+        return np.array(X)  
+
+class TableVectorizerWrapper(TableVectorizer): # table vectorized inherently doesn support get_feature names out 
+    def get_feature_names_out(self, input_features=None):
+        # Call the original method ignoring the input_features argument.
+        return super().get_feature_names_out()
+    
 class PreserveFeatureNamesRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, regressor, feature_names=None):
         self.regressor = regressor
@@ -118,17 +136,14 @@ class LeastDistanceCorrelatedRandomFeature(BaseEstimator, TransformerMixin):
         self.n_candidates = n_candidates
         self.random_state = random_state
         self.feature_name = feature_name
-        
+
     def fit(self, X, y=None):
         if y is None:
-            raise ValueError("Target vector y must be provided to compute distance correlation.")
-            
+            raise ValueError("Target vector y must be provided.")
         rng = np.random.RandomState(self.random_state)
         n_samples = X.shape[0]
-        
         best_dcorr = np.inf
-        best_vector = None
-        
+        best_candidate = None
         for _ in range(self.n_candidates):
             candidate = rng.normal(size=n_samples)
             d_corr = dcor.distance_correlation(candidate, y)
@@ -136,21 +151,34 @@ class LeastDistanceCorrelatedRandomFeature(BaseEstimator, TransformerMixin):
                 d_corr = np.inf
             if d_corr < best_dcorr:
                 best_dcorr = d_corr
-                best_vector = candidate
-        print(d_corr)
-        # Instead of storing the candidate itself, store its mean and std
-        self.best_mean_ = np.mean(best_vector)
-        self.best_std_ = np.std(best_vector)
+                best_candidate = candidate
+        self.best_mean_ = np.mean(best_candidate)
+        self.best_std_ = np.std(best_candidate)
+        # Store the input feature names from X so we can use them later
+        if hasattr(X, "columns"):
+            self.feature_names_in_ = list(X.columns)
+        else:
+            self.feature_names_in_ = [f"feature_{i}" for i in range(X.shape[1])]
         return self
 
     def transform(self, X):
         n = X.shape[0]
-        # Generate a new random vector with the same distribution as the best candidate from fit
+        # Generate a fresh random vector with the same distribution as the best candidate
         new_rand = np.random.normal(loc=self.best_mean_, scale=self.best_std_, size=n)
-
+        # If X is a DataFrame, append the new feature column with its name.
         if hasattr(X, "assign"):
             X_new = X.copy()
             X_new[self.feature_name] = new_rand
             return X_new
         else:
             return np.hstack([X, new_rand.reshape(-1, 1)])
+
+    def get_feature_names_out(self, input_features=None):
+        # Use stored input features if none are provided
+        if input_features is None:
+            if hasattr(self, "feature_names_in_"):
+                input_features = self.feature_names_in_
+            else:
+                raise ValueError("No input features available; fit the transformer first.")
+        # Append the name of the new feature to the provided feature names
+        return list(input_features) + [self.feature_name]
