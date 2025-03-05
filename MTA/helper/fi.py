@@ -8,14 +8,121 @@ from sklearn.inspection import permutation_importance
 from sklearn import set_config
 
 set_config(transform_output="pandas") # keep output of each step as dataframe to preserve column (feature) names 
+  
 
+def compute_feature_importances(pipeline, df_X, y, groups, imp_method="internal", n_repeats=10):
+    """
+    Compute feature importances using different methods: 'internal', 'perm', or 'shap'.
+    
+    Args:
+        pipeline: The fitted machine learning pipeline.
+        df_X: Feature dataframe.
+        y: Target variable.
+        groups: Grouping variable for cross-validation.
+        imp_method: Method to compute feature importances ('internal', 'perm', or 'shap').
+        n_repeats: Number of repeats for permutation importance (only used if imp_method='perm').
+
+    Returns:
+        final_df: DataFrame containing sorted feature importances.
+        fold_importance_storage: Dictionary with per-fold feature importance DataFrames.
+    """
+    
+    print(f"🚀 Computing feature importances using: {imp_method.upper()} method...")
+    
+    gkf = GroupKFold(n_splits=3)
+    
+    feature_importances_list = []
+    weighted_importances_list = []
+    r2_scores = []
+    all_features = pd.Index([])  
+    fold_importance_storage = {}  
+
+    for fold_idx, (train_idx, test_idx) in enumerate(gkf.split(df_X, y, groups)):
+        print(f"\n📊 Processing Fold {fold_idx + 1}/{gkf.get_n_splits()}")
+
+        X_train, X_test = df_X.iloc[train_idx], df_X.iloc[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        pipeline.fit(X_train, y_train)
+        model = pipeline.named_steps['regressor']
+
+        feature_names = pd.Index(pipeline[:-2].get_feature_names_out())  
+        all_features = all_features.union(feature_names)  
+
+        X_train_transformed = pipeline[:-1].transform(X_train)
+        y_pred = pipeline.predict(X_test)
+        r2 = r2_score(y_test, y_pred)
+        r2_scores.append(r2)
+
+        print(f"📌 Fold {fold_idx} R² Score: {r2:.4f}")
+        print(f"📌 Fold {fold_idx} Features: {len(feature_names)}")
+
+        # Extract feature importance based on the selected method
+        if imp_method == "internal":
+            print("⚙️ Extracting feature importances from the model...")
+            if hasattr(model, "feature_importances_"):
+                importances = model.feature_importances_
+            elif hasattr(model, "get_booster"):  
+                importances = model.get_booster().get_score(importance_type="gain")
+                importances = np.array([importances.get(f, 0) for f in feature_names])
+            else:
+                raise ValueError("Selected model does not support internal feature importance.")
+
+        elif imp_method == "perm":
+            print("🔄 Computing permutation importance...")
+            X_test_transformed = pipeline[:-1].transform(X_test)
+            result = permutation_importance(model, X_test_transformed, y_test, n_repeats=n_repeats, random_state=42, scoring="r2")
+            importances = result.importances_mean  
+
+        elif imp_method == "shap":
+            print("🧩 Computing SHAP values...")
+            explainer = shap.Explainer(model, X_train_transformed)
+            shap_values = explainer(X_train_transformed)
+            importances = np.abs(shap_values.values).mean(axis=0)
+
+        else:
+            raise ValueError("Invalid feature importance method. Choose from 'internal', 'perm', or 'shap'.")
+
+        weighted_importance_ = importances * r2
+
+        fold_importance_df = pd.DataFrame({
+            'feature': feature_names,
+            f'importance_fold_{fold_idx}': importances
+        })
+
+        fold_importance_storage[f'fold_{fold_idx}'] = fold_importance_df  
+
+        feature_importances_list.append(pd.DataFrame({'feature': feature_names, 'importance': importances}))
+        weighted_importances_list.append(pd.DataFrame({'feature': feature_names, 'weighted_importance': weighted_importance_}))
+
+    print("\n📊 Aggregating feature importances across folds...")
+
+    # Compute mean feature importance
+    fi_df = pd.concat(feature_importances_list).groupby('feature', as_index=False).mean()
+    weighted_fi_df = pd.concat(weighted_importances_list).groupby('feature', as_index=False).mean()
+
+    # Merge normal and weighted feature importances
+    final_df = fi_df.merge(weighted_fi_df, on="feature", how="left")
+
+    # Sort feature importances in descending order
+    final_df = final_df.sort_values("importance", ascending=False).reset_index(drop=True)
+
+    # Add a row for R² distribution
+    r2_distribution_row = pd.DataFrame({'feature': ['R² Distribution'], 'importance': [r2_scores], 'weighted_importance': [np.nan]})
+    final_df = pd.concat([final_df, r2_distribution_row], ignore_index=True)
+
+    print("✅ Feature importance computation completed!")
+    print(f"📈 Final DataFrame Shape: {final_df.shape}")
+
+    return final_df, fold_importance_storage    
+    
 def get_fi_from_model(pipeline, df_X, y, fitted = False):
     model_type = pipeline.named_steps["regressor"].__class__.__name__
     if not fitted:
         pipeline.fit(df_X, y)
     if model_type == "RandomForestRegressor":
         
-        feature_names =  pipeline[:-1].get_feature_names_out()
+        feature_names =  pipeline[:-2].get_feature_names_out()
 
         rf_step = pipeline.named_steps['regressor']
         importances = rf_step.feature_importances_
@@ -29,7 +136,7 @@ def get_fi_from_model(pipeline, df_X, y, fitted = False):
         
         booster = xgb_regressor.get_booster()
         gain_importances_dict = booster.get_score(importance_type='gain')
-        feature_names = pipeline[:-1].get_feature_names_out()
+        feature_names = pipeline[:-2].get_feature_names_out()
 
 
         feature_map = {f"f{i}": feature_names[i] for i in range(len(feature_names))}
