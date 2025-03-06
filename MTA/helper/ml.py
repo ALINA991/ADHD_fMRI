@@ -7,10 +7,11 @@ from decimal import Decimal, ROUND_DOWN
 from helper import audit
 import os 
 import re 
+from collections import defaultdict
 
-def rater_matches(table_value,rater):
+def value_matches(table_value,input_value):
 
-    rater_lower = rater.lower()
+    rater_lower = input_value.lower()
     value_lower = table_value.lower()
     return rater_lower in  value_lower
 
@@ -36,41 +37,50 @@ def find_result_in_file(file_path_save, model_type, corr_select, thr_drop_row, r
         "m": "Mother", 
         "f": "Father", 
         "t": "Teacher", 
-        "all" : "All Raters"
+        "all": "All Raters"
     }
-    
+
     if not os.path.exists(file_path_save):
-        print("File not found")
         return False
+
     print("Reading file... ")
     df = pd.read_csv(file_path_save)
 
     required_columns = [
         'Model Name', 'Feature Selection Method', 
-        'Threshold Drop Row', 'Number of Features', 'Outcome Variable'
+        'Outcome Variable', 'Number of Features',  # Number of Features contains string that specifies input data
+        'Threshold Drop Row'
     ]
-    
-    if not all(col in df.columns for col in required_columns):
-        print("Columns do not match ")
-        return False
-    
-    if corr_select:
-        feature_select_meth ='Correlation Selector'
-        print(feature_select_meth)
-    else: feature_select_meth = 'No feature selection'
-    # Extract the rater from the "Number of Features" column
-    rater_pred_ = rater_pred if rater_pred is not None else "all"
-    rater_pred = "Selection : {}".format(rater_dict[rater_pred_])
-    rater_out = rater_dict[rater_out]
-    
 
+    if not all(col in df.columns for col in required_columns):
+        return False
+
+    # Determine feature selection method
+    feature_select_meth_to_find = "correlation" if corr_select else "No"
+
+    # Ensure rater values are in the correct format for lookup
+    rater_pred_ = "all" if rater_pred is None else rater_pred
+    rater_pred_to_find = rater_dict[rater_pred_]
+    rater_out_to_find = rater_dict[rater_out]
+    thr_drop_row_to_find = thr_drop_row
+
+    # Extract Outcome Variable for verification
+    outcome_var_col = df['Outcome Variable'].iloc[0]
+    print("Extracted Outcome Variable:", outcome_var_col.split("\n")[-1].split(" ")[-1])
+    
+    pred_rater = df["Number of Features"].iloc[0]
+    print("Pred rater ", pred_rater.split(":")[1].split("\n")[0].strip())
+
+    # Ensure the extraction and comparison is applied correctly
     match = df[
         (df['Model Name'] == model_type) &
-        (df['Feature Selection Method'] == feature_select_meth) &
-        (df["Threshold Drop Row"] == thr_drop_row) &
-        (df['Outcome Variable'].apply(lambda x: rater_matches(x, rater_out))) &
-        (df['Number of Features'].apply(lambda x: rater_matches(x, rater_pred)))
+        (df['Feature Selection Method'].apply(lambda x: value_matches(x, feature_select_meth_to_find))) &
+        (df["Threshold Drop Row"] == thr_drop_row_to_find) &
+        (df['Outcome Variable'].apply(lambda x: value_matches(x.split("\n")[-1].split(" ")[-1].strip(), rater_out_to_find))) &
+        (df["Number of Features"].apply(lambda x: value_matches(x.split(":")[1].split("\n")[0].strip(), rater_pred_to_find))) 
     ]
+
+
     if not match.empty:
         print("\nResults already exists in file.. ")
         print("Skipping ...\n")
@@ -114,45 +124,48 @@ def format_dict_to_text(data_dict): # get support data as formated text for resu
     formatted_text = "\n".join(lines)
     return formatted_text
 
-def get_results_from_random_search(random_search, outcome_short, rater_out,rater_pred,  thr_drop_missing, get_dist = False ):
+def get_results_from_random_search(random_search, outcome_short, rater_out, rater_pred, thr_drop_missing, get_dist=False):
     
-    if get_dist:
-        cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
-        'Mean Squared Error Distribution', 'Root Mean Squared Error Distribution', 'Mean Absolute Error Distribution',
-        'R² Score Distribution', 'Outcome Variable',  'Number of Features',
-        'Feature Selection Method', 'Threshold Drop Row']
-    else:
-        cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
-        'Mean Squared Error', 'Root Mean Squared Error', 'Mean Absolute Error',
-        'R² Score', 'Outcome Variable',  'Number of Features',
-        'Feature Selection Method', 'Threshold Drop Row']
-    
+    cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
+                'Mean Squared Error', 'Root Mean Squared Error', 'Mean Absolute Error',
+                'R² Score', 'Outcome Variable', 'Number of Features',
+                'Feature Selection Method', 'Threshold Drop Row']
 
-    outcome_result_dict = {'ODD':  "SNAP ODD Symptoms T Score", "HYP": "SNAP Hyperactivity Symptoms T Score", "INATT" :"SNAP Inattention Symptoms T Score" , "INTERN": "SSRS Internalizing Symptoms", "SS": "SSRS Social Skills T Score", "DOM": "Parental Dominance Mean Score", "INTIM": "Parent-Child Intimacy Mean Score"}
+    cols_res_dist = cols_res + [  # store additional data 
+        'Std RMSE', 'Std MAE', 'Std R²',  
+        'Train RMSE', 'Train MAE', 'Train R²',  
+        'Mean Fit Time', 'Mean Score Time'
+    ]
+    
+    outcome_result_dict = {
+        "ODD": "SNAP ODD Symptoms T Score", "HYP": "SNAP Hyperactivity Symptoms T Score", 
+        "INATT": "SNAP Inattention Symptoms T Score", "INTERN": "SSRS Internalizing Symptoms", 
+        "SS": "SSRS Social Skills T Score", "DOM": "Parental Dominance Mean Score", 
+        "INTIM": "Parent-Child Intimacy Mean Score"
+    }
 
     rater_dict = {
         "m": "Mother", 
         "f": "Father", 
         "t": "Teacher", 
-        "all" : "All Raters"
+        "all": "All Raters"
     }
     
-    outcome_table = outcome_result_dict[outcome_short] + "\n- rated  by {}".format(rater_dict[rater_out])
+    outcome_table = outcome_result_dict[outcome_short] + "\n- rated by {}".format(rater_dict[rater_out])
     
     cv_results = random_search.cv_results_
     results_df = pd.DataFrame(cv_results)
     cross_val_strategy = str(random_search.cv)
 
     best_index = random_search.best_index_
-    best_results = results_df.iloc[best_index] # best results relating to best hyperparam configuration 
+    best_results = results_df.iloc[best_index]  # Best results relating to best hyperparam configuration 
     best_pipeline = random_search.best_estimator_
     
-    support_data =  get_support_data(best_pipeline)
+    support_data = get_support_data(best_pipeline)
     formatted_support_data_short = format_dict_to_text(support_data)
     
     input_rater_short = rater_pred if rater_pred is not None else "all"
-    formatted_support_data= "Selection : {} \n {}".format(rater_dict[input_rater_short], formatted_support_data_short)
-
+    formatted_support_data = "Selection : {} \n {}".format(rater_dict[input_rater_short], formatted_support_data_short)
 
     print("Metrics for Best Parameters:")
     print(best_results[['mean_test_rmse', 'mean_test_mae', 'mean_test_r2']])
@@ -167,28 +180,52 @@ def get_results_from_random_search(random_search, outcome_short, rater_out,rater
         mse = [cv_results[f"split{i}_test_rmse"][best_index] ** 2 for i in range(n_splits)]
         rmse = [cv_results[f"split{i}_test_rmse"][best_index] for i in range(n_splits)]
 
+        # Extract additional metrics for later analysis
+        std_rmse = truncate(best_results['std_test_rmse'], 4)
+        std_mae = truncate(best_results['std_test_mae'], 4)
+        std_r2 = truncate(best_results['std_test_r2'], 4)
+        train_rmse = truncate(best_results['mean_train_rmse'], 4)
+        train_mae = truncate(best_results['mean_train_mae'], 4)
+        train_r2 = truncate(best_results['mean_train_r2'], 4)
+        mean_fit_time = truncate(best_results['mean_fit_time'], 4)
+        mean_score_time = truncate(best_results['mean_score_time'], 4)
+
     else: 
         rmse = - truncate(best_results['mean_test_rmse'], 4)
-        mse =  truncate(best_results['mean_test_rmse'] ** 2, 4)
+        mse = truncate(best_results['mean_test_rmse'] ** 2, 4)
         mae = - truncate(best_results['mean_test_mae'], 4)
         r2 = truncate(best_results['mean_test_r2'], 4)
 
-
     model_name = best_pipeline.named_steps['regressor'].__class__.__name__
 
-
-    params_values = dict(zip( [key.replace('regressor__', '') for key in random_search.best_params_.keys()], random_search.best_params_.values()))
-    params_values
+    params_values = dict(zip([key.replace('regressor__', '') for key in random_search.best_params_.keys()], 
+                             random_search.best_params_.values()))
     
     formatted_params = format_dict_to_text(params_values)
 
     if 'correlation_selector' in random_search.best_estimator_.named_steps.keys():
-        feature_select_meth ='Correlation Selector {}'.format( best_pipeline.named_steps['correlation_selector'].get_params())
-        print(feature_select_meth)
-    else: feature_select_meth = 'No feature selection'
-
+        n_estimators = best_pipeline.named_steps['correlation_selector'].get_params()["model"].get_params()["n_estimators"]
+        name = type(best_pipeline.named_steps['correlation_selector'].get_params()["model"]).__name__
+        threshold = best_pipeline.named_steps['correlation_selector'].get_params()['threshold']
         
-    new_row = dict(zip(cols_res, [model_name, cross_val_strategy, formatted_params, mse, rmse, mae, r2,  outcome_table, formatted_support_data, feature_select_meth, thr_drop_missing]))
+        corr_params_dict = {"Model Type": name, "N Estimators": n_estimators, "Threshold": threshold}
+        corr_params_text = format_dict_to_text(corr_params_dict)
+
+        feature_select_meth = 'Correlation Selector (Model-Based) \n{}'.format(corr_params_text)
+        print(feature_select_meth)
+        
+    else: 
+        feature_select_meth = 'No feature selection'
+
+    # Choose the appropriate column list based on `get_dist`
+    new_row = dict(zip(
+        cols_res_dist if get_dist else cols_res,
+        [
+            model_name, cross_val_strategy, formatted_params, mse, rmse, mae, r2,  
+            outcome_table, formatted_support_data, feature_select_meth, thr_drop_missing
+        ] + ([std_rmse, std_mae, std_r2, train_rmse, train_mae, train_r2, mean_fit_time, mean_score_time] if get_dist else [])
+    ))
+
     return new_row
 
 
@@ -339,15 +376,14 @@ def get_params_from_result(file_path_save, how= "best", index = None):
     rater_out = rater_dict_rev[out_str.split("\n")[-1].split(" ")[-1]]
     
     rater_pred = rater_dict_rev[parse_formatted_text_to_dict(result['Number of Features'].iloc[0])["Selection"].strip()]
-    corr_select=  result['Feature Selection Method'].iloc[0]
 
-    if corr_select.startswith('correlation_selector'):
-        name_part, dict_part = corr_select.split(' ', 1)
-        thr_corr = ast.literal_eval(dict_part)['threshold']
+    if 'correlation_selector__threshold' in params:
+        corr_select = True 
+        thr_corr= params['correlation_selector__threshold']
+        params.pop('correlation_selector__threshold' )
     else: 
         thr_corr = None
-        
-    corr_select = True if corr_select.startswith('correlation_selector') else False
+        corr_select = False
         
     if rater_pred == 'all':
         rater_pred = None
@@ -373,30 +409,28 @@ def get_params_from_result(file_path_save, how= "best", index = None):
 
 
 
-def check_overlap(**kwargs):
+def check_overlap(ord_vars, num_vars,  cat_vars_str, cat_vars_num):
     print("\n Checking for overlaps.. ")
-    """
-    Checks and prints the overlap between each pair of lists and the overall overlap,
-    using the variable names provided as keyword argument keys.
+    feature_assignments = defaultdict(list)
 
-    Example usage:
-      check_overlap(num_vars=num_vars, ord_vars=ord_vars, cat_vars=cat_vars)
-    """
-    sets = {name: set(lst) for name, lst in kwargs.items()}
-    keys = list(sets.keys())
-    
-    # Pairwise overlaps:
-    for i in range(len(keys)):
-        for j in range(i + 1, len(keys)):
-            overlap = sets[keys[i]] & sets[keys[j]]
-            print(f"Overlap between {keys[i]} and {keys[j]}: {overlap}")
-    
-    # Overlap across all lists:
-    if sets:
-        overall_overlap = set.intersection(*sets.values())
-        print("Overlap across all lists:", overall_overlap)
-    else:
-        print("No lists provided.")
+    # Track which transformer each column is assigned to
+    for feature in num_vars:
+        feature_assignments[feature].append('num_pipe')
+    for feature in cat_vars_str:
+        feature_assignments[feature].append('cat_str_pipe')
+    for feature in cat_vars_num:
+        feature_assignments[feature].append('cat_num_pipe')
+    for feature in ord_vars:
+        feature_assignments[feature].append('ord_pipe')
+
+    # Identify duplicates
+    duplicates = {feat: pipes for feat, pipes in feature_assignments.items() if len(pipes) > 1}
+
+    if duplicates:
+        print("❌ Duplicate features assigned to multiple transformers:")
+        for feature, pipes in duplicates.items():
+            print(f"{feature}: {pipes}")
+        raise ValueError("Fix duplicate column assignments before running the pipeline.")
         
 def prepare_data(pred, out, rater_pred, rater_out, thr_drop_missing, outcome_var):
     print("\nPreparing data...")
@@ -499,6 +533,12 @@ def get_var_types(df_X, types_file_path ):
             rest.append(str(col))          # store in `rest` for debugging
 
 
+    ord_vars = list(set(ord_vars))
+    ord_vars = list(set(ord_vars) - set(num_vars) - set(cat_vars_str) - set(cat_vars_num))
+    cat_vars_str = list(set(cat_vars_str) - set(num_vars) - set(ord_vars))
+    cat_vars_num = list(set(cat_vars_num) - set(num_vars) - set(ord_vars))
+    
+    
     print("\nOrdinal variables:", len(ord_vars))
     print("Numeric variables:", len(num_vars))
     print("Categorical numeric variables:", len(cat_vars_num))

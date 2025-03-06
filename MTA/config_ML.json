@@ -1,5 +1,5 @@
 {
-    "outcome" : [ "ODD", "HYP", "INATT", "INTERN", "SS", "DOM", "INTIM"],
+    "outcome" : ["ODD", "HYP","INATT", "INTERN", "SS", "DOM", "INTIM"],
     "rater_out" : [ "m", "f", "t"],  
     "rater_pred" : [null, "m", "f", "t"],
     "model_type": [ "RandomForestRegressor", "XGBRegressor"],

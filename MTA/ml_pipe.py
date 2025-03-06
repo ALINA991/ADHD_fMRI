@@ -69,16 +69,16 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
     thr_drop_missing = int(thr_drop_missing)
     rater_pred = None if rater_pred == "None" else rater_pred
     
-    
 
     outcome_dict = {'ODD':  "snap_snaoddt", "HYP": "snap_snahypat", "INATT" :"snap_snainatt" , "INTERN": "ssrs_sspintt", "SS": "ssrs_ssptosst", "DOM": "pcrc_pcrcpax", "INTIM": "pcrc_pcrcprx"}
 
     file_name_save = 'results_ML_simple_CV_RF_XGB_{}.csv'.format(outcome_short)
     file_name_save_dist = 'dist_results_ML_simple_CV_RF_XGB_{}.csv'.format(outcome_short)
-
-    if Path('/Volumes/Samsung_T5/MIT/mta').exists():
-        data_root =     '/Volumes/Samsung_T5/MIT/mta'
-        data_derived  = '/Volumes/Samsung_T5/MIT/mta/output/derived_data'
+    
+    if Path('/Volumes/alina').exists():
+        print("Writing on external drive.. ")
+        data_root =     '/Volumes/alina/MIT/code/data'
+        data_derived  = '/Volumes/alina/MIT/code/data/output/derived_data'
     else: 
         data_root = '/Users/alina/Desktop/MIT/code/data'
         data_derived  = '/Users/alina/Desktop/MIT/code/data/output/derived_data'
@@ -89,11 +89,10 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
     file_path_save_mean = Path(save_path, file_name_save) # path to save and load ML resluts tabke 
     file_path_save_dist= Path(save_path, file_name_save_dist) 
     
-    # result_exists = ml.find_result_in_file(file_path_save_mean, model_type, corr_select,thr_drop_missing , rater_pred, rater_out)
+    result_exists = ml.find_result_in_file(file_path_save_mean, model_type, corr_select, thr_drop_missing, rater_pred, rater_out)
 
-
-    # if result_exists: # if result exists in file, skip loop 
-    #     continue
+    if result_exists: # if result exists in file, skip loop 
+        continue
     ################## DATA ####################
     pred = pd.read_csv(Path(data_derived, 'mta_data_clean.csv')).drop(columns = 'Unnamed: 0')
     out = pd.read_csv(Path(data_derived, 'out_clean_all_raters.csv')).drop(columns = 'Unnamed: 0')
@@ -125,7 +124,7 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
 
     pipeline, param_distributions, = make_pipeline(model_type= model_type, corr_select= corr_select, 
                                                         ord_vars= ord_vars,num_vars=num_vars,  cat_vars_str= cat_vars_str, 
-                                                        cat_vars_num = cat_vars_num, params= params)
+                                                        cat_vars_num = cat_vars_num, params= params, include_rand_feature=False)
 
 
 

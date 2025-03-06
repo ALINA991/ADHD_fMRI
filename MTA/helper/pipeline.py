@@ -3,6 +3,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 
 from scipy.stats import randint, uniform
+import numpy as np
 
 from helper.transformers import DataFrameToNumpy, CorrelationSelector, LeastDistanceCorrelatedRandomFeature, TableVectorizerWrapper
 
@@ -17,7 +18,7 @@ from skrub import TableVectorizer
 set_config(transform_output="pandas")
 
 
-def make_pipeline(model_type, corr_select, ord_vars, num_vars, cat_vars_str, cat_vars_num, params = None):
+def make_pipeline(model_type, corr_select, ord_vars, num_vars, cat_vars_str, cat_vars_num, params = None, include_rand_feature=False):
 
     
     if params is not None:
@@ -46,6 +47,8 @@ def make_pipeline(model_type, corr_select, ord_vars, num_vars, cat_vars_str, cat
             'regressor__min_samples_split': randint(2, 12),
             'regressor__min_samples_leaf': randint(1, 7)
         }
+        if corr_select:
+            param_distributions.update({'correlation_selector__threshold':  [0.7, 0.75, 0.8, 0.85, 0.9]})
             
 
 
@@ -74,33 +77,36 @@ def make_pipeline(model_type, corr_select, ord_vars, num_vars, cat_vars_str, cat
         ('num', num_pipe, num_vars),
         ('cat_str', cat_str_pipe, cat_vars_str),
         ('cat_num', cat_num_pipe, cat_vars_num),
-        ('ord', ord_pipe, ord_vars),
-        #('rand_feature', PreserveFeatureNames( LeastDistanceCorrelatedRandomFeature(n_candidates=10, random_state=42, feature_name = "random_vector"))),
+        ('ord', ord_pipe,ord_vars),
 
     ])
-
-    if corr_select : 
-        pipeline = Pipeline(steps=[
-        ('preprocessor', preprocessor),
-        ('correlation_selector', CorrelationSelector(threshold=0.8)),
-        ('rand_feature', LeastDistanceCorrelatedRandomFeature(n_candidates=10, random_state=42, feature_name = "random_vector")),
-        ('to_numpy', DataFrameToNumpy()),
-        ('regressor',regress)
-        ])
-    else: 
-        pipeline = Pipeline(steps=[
-            ('preprocessor', preprocessor),
-            ('rand_feature', LeastDistanceCorrelatedRandomFeature(n_candidates=10, random_state=42, feature_name = "random_vector")),
-            ('to_numpy', DataFrameToNumpy()), # this is required for the xgbRegressor, throws error otherwose 
-            ('regressor',regress)
-        ])
-        
-
-
     
-    if params is not None: 
+    steps = [('preprocessor', preprocessor)]
+
+    if corr_select: # removes highly correlated features, in a priority order defined by feature importance returned by this model
+        steps.append(('correlation_selector', CorrelationSelector(model=XGBRegressor(n_estimators=50, random_state=42))))
+    
+    if include_rand_feature: # add random feature, with least distance correlation from target vector y 
+        steps.append(('rand_feature', LeastDistanceCorrelatedRandomFeature(n_candidates=10, random_state=42, feature_name="random_vector")))
+    
+    steps.append(('to_numpy', DataFrameToNumpy()))
+    steps.append(('regressor', regress))
+    
+    pipeline = Pipeline(steps=steps)
+
+    """ pipeline including all steps would look like this : 
+        Pipeline(steps=[
+                    ('preprocessor', preprocessor),
+                    ('correlation_selector', CorrelationSelector(model=XGBRegressor(n_estimators=50, random_state=42))),
+                    ('rand_feature', LeastDistanceCorrelatedRandomFeature(n_candidates=10, random_state=42, feature_name="random_vector")),
+                    ('to_numpy', DataFrameToNumpy()),
+                    ('regressor', regress)])
+    """
+
+    if params is not None: # params have been set in regressor object
         return pipeline 
 
     else: 
-        return pipeline, param_distributions
+        return pipeline, param_distributions # params will be evaluated in Random search later on 
+        
         
