@@ -43,7 +43,7 @@ def make_pipeline(model_type, corr_select, ord_vars, num_vars, cat_vars_str, cat
             regress = RandomForestRegressor(random_state= 42)
             param_distributions = {
             'regressor__n_estimators': randint(100, 600),
-            'regressor__max_depth': [None] + list(range(5, 21, 5)),
+            'regressor__max_depth': list(range(5, 21, 5)),# [None] 
             'regressor__min_samples_split': randint(2, 12),
             'regressor__min_samples_leaf': randint(1, 7)
         }
@@ -53,19 +53,19 @@ def make_pipeline(model_type, corr_select, ord_vars, num_vars, cat_vars_str, cat
 
 
     num_pipe = Pipeline([
-        ('imputer', SimpleImputer(strategy='mean')), # check paper 
+        ('imputer', SimpleImputer(strategy='mean')), # check paper # check more sophisticated imputation strategies 
         ('std_scaler',StandardScaler())
     ])
 
     ord_pipe = Pipeline([
-        ('imputer', SimpleImputer(strategy='constant', fill_value=-1)), # change that to OrdinalEncoder sklearn -- just encodes to catgoreies !!
+        ('imputer', SimpleImputer(strategy='constant', fill_value=-1)), 
         ('identity', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1))
     ])
 
 
     cat_str_pipe = Pipeline([
         ('imputer',SimpleImputer(strategy='constant', fill_value='missing')),
-        ('ohe', TableVectorizerWrapper())
+        ('ohe', TableVectorizerWrapper()) # wrapper here to extract feature names, TableVectorizer() does not implement get_feature_names_out()
     ])
 
     cat_num_pipe = Pipeline([

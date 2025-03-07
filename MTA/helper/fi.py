@@ -67,7 +67,7 @@ def compute_feature_importances(pipeline, df_X, y, groups, imp_method="internal"
         pipeline.fit(X_train, y_train)
         model = pipeline.named_steps['regressor']
 
-        feature_names = pd.Index(pipeline[:-2].get_feature_names_out())  
+        feature_names = pd.Index(pipeline.named_steps['rand_feature'].get_feature_names_out())  
         all_features = all_features.union(feature_names)  
 
         X_train_transformed = pipeline[:-2].transform(X_train)

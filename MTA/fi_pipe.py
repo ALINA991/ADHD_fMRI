@@ -70,14 +70,21 @@ for outcome_short in config["outcome"]: # iterate over possible outcomes :  ["OD
     # input data, feature selection methods and hyperparams..
     for index in range(result_file_shape): 
         model_type,  corr_select, thr_corr, params,  outcome_var, rater_out, rater_pred, thr_drop_missing, original_r2 = ml.get_params_from_result(result_path, results_how, index)
-
+        print(params)
+        thr_drop_missing = int(thr_drop_missing)
+        rater_pred = None if rater_pred == "None" else rater_pred
+        for key, val in params.items(): 
+            if val == "None":
+                params[key] = None
         fi_name_save = fi.get_importance_file_name(model_type, outcome_short, corr_select, thr_corr, params,  outcome_var, rater_out, rater_pred, thr_drop_missing)
         fi_save_path = Path(data_derived, "ML_results","feature_importances", fi_name_save)
         
         if fi_save_path.exists(): # if the file already exists, skip computation and go to next interation
-            print("\nResult {}exists...".format(fi_name_save))
+            print("\nResult {} exists...".format(fi_name_save))
             print("Skipping.. \n")
             continue
+    
+        rater_pred = None if rater_pred == "None" else rater_pred
         
 
         data, df_X, y, rater_count_X = ml.prepare_data(pred, out, rater_pred, rater_out, thr_drop_missing, outcome_var)

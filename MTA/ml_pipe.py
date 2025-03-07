@@ -83,9 +83,9 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
         data_root = '/Users/alina/Desktop/MIT/code/data'
         data_derived  = '/Users/alina/Desktop/MIT/code/data/output/derived_data'
 
-    info_path = Path(data_root, "files") # dewcipion of vars as written out questions 
+    info_path = Path(data_root, "files") # description  of vars as written out questions 
     save_path = Path(data_derived, 'ML_results')
-    types_file_path = Path(data_derived,"all_vars_description_ML.xlsx" ) # deescription of variables aas ordinal, numeric or categorical 
+    types_file_path = Path(data_derived,"all_vars_description_ML.xlsx" ) # description  of variables aas ordinal, numeric or categorical 
     file_path_save_mean = Path(save_path, file_name_save) # path to save and load ML resluts tabke 
     file_path_save_dist= Path(save_path, file_name_save_dist) 
     
@@ -94,8 +94,8 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
     if result_exists: # if result exists in file, skip loop 
         continue
     ################## DATA ####################
-    pred = pd.read_csv(Path(data_derived, 'mta_data_clean.csv')).drop(columns = 'Unnamed: 0')
-    out = pd.read_csv(Path(data_derived, 'out_clean_all_raters.csv')).drop(columns = 'Unnamed: 0')
+    pred = pd.read_csv(Path(data_derived, 'mta_data_clean.csv')).drop(columns = 'Unnamed: 0') # baseline 0 months 
+    out = pd.read_csv(Path(data_derived, 'out_clean_all_raters.csv')).drop(columns = 'Unnamed: 0') # 14 months 
 
 
     col_out = outcome_dict[file_name_save.split(".")[0].split("_")[-1]] + "_"+ rater_out
@@ -111,6 +111,8 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
     dup_cols = ml.check_duplicates(df_X) # print duplicates if any 
     assert dup_cols == [] 
 
+    # get the variable types to feed in each sub_pipeline 
+    # to to variable type specific preprocessing 
     ord_vars, num_vars, cat_vars_str, cat_vars_num = ml.get_var_types(df_X, types_file_path) # get types of each variable 
 
 
@@ -157,7 +159,7 @@ for outcome_short, rater_out, rater_pred, model_type, corr_select, thr_drop_miss
     print("Best Parameters:", random_search.best_params_)
     print("Best Score:", random_search.best_score_)
 
-
+    # generate a new standardized row to appand to an existing dataframe, or create new one 
     new_row_mean = ml.get_results_from_random_search(random_search, outcome_short,rater_out,rater_pred,  thr_drop_missing)
     new_row_dist = ml.get_results_from_random_search(random_search, outcome_short,rater_out,rater_pred,  thr_drop_missing, get_dist=True)
     # if verify_before save is set to True, save and reduced parameters will be ignored 

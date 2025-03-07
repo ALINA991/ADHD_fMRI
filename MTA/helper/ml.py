@@ -9,6 +9,317 @@ import os
 import re 
 from collections import defaultdict
 
+
+def prepare_data(pred, out, rater_pred, rater_out, thr_drop_missing, outcome_var):
+    print("\nPreparing data...")
+
+    if rater_pred is not None:
+        col_pred = [col for col in pred.columns if col.endswith(rater_pred) or col.endswith("c")]
+        col_pred.append("src_subject_id")
+        col_pred.append("trtname")
+        pred = pred[col_pred]
+
+    # Process outcome columns
+    col_out_rater = [col for col in out.columns if col.endswith(rater_out) ]
+    out_rater = out[np.concatenate((['src_subject_id'], col_out_rater))]
+
+    out_rater = out_rater.rename(
+        columns={col: f"{col}_out" for col in out_rater.columns if col != 'src_subject_id'}
+    )
+    
+
+    y_col = "_".join([outcome_var, rater_out, "out"])
+
+    # Merge predictions and outcomes on 'src_subject_id'
+    try : 
+        data = pd.merge(out_rater[[y_col, 'src_subject_id']], pred, how='left', on='src_subject_id')
+        data = audit.remove_cols(data, thr_drop_missing=thr_drop_missing)
+        if y_col not in data.columns: 
+            print("{} has been removed from dataframe during audit, as there is not enough data available.".format(y_col))
+            return None, None, None, None # returning None will skip the loop for this outcome 
+    except KeyError as e:
+        print(str(e))
+        return None, None, None, None 
+
+    # Prepare feature matrix and target array
+    X_cols = [col for col in data.columns if col not in [y_col]]
+    
+    data = data.dropna(subset=[y_col])
+    y = np.array(data[y_col]) #extract outcome array 
+    
+    print("\nOutcome to predict (Y) : ", y_col)
+    print("\nY shape: ", y.shape)
+    
+    df_X = data[X_cols].drop(columns='src_subject_id')
+    
+    print("X shape ", df_X.shape)
+    rater_count_df_X = rater_count(df_X)
+
+    return data, df_X, y, rater_count_df_X
+
+def check_overlap(ord_vars, num_vars,  cat_vars_str, cat_vars_num):
+    
+    print("\n Checking for overlaps.. ")
+    feature_assignments = defaultdict(list)
+
+    # Track which transformer each column is assigned to
+    for feature in num_vars:
+        feature_assignments[feature].append('num_pipe')
+    for feature in cat_vars_str:
+        feature_assignments[feature].append('cat_str_pipe')
+    for feature in cat_vars_num:
+        feature_assignments[feature].append('cat_num_pipe')
+    for feature in ord_vars:
+        feature_assignments[feature].append('ord_pipe')
+
+    # Identify duplicates
+    duplicates = {feat: pipes for feat, pipes in feature_assignments.items() if len(pipes) > 1}
+
+    if duplicates:
+        print("❌ Duplicate features assigned to multiple transformers:")
+        for feature, pipes in duplicates.items():
+            print(f"{feature}: {pipes}")
+        raise ValueError("Fix duplicate column assignments before running the pipeline.")
+        
+
+
+def get_var_types(df_X, types_file_path ):
+    print("\nExtracting variable types from file...")
+    
+    col_names_data = list(df_X.columns)
+
+    ord_vars, num_vars, cat_vars, rest = [], [], [], []
+
+    types_df = pd.read_excel(types_file_path, sheet_name='Sheet1')
+
+    for _, row in types_df.iterrows():
+        var_name = row.iloc[1]  # e.g. variable name in the spreadsheet
+        var_type = row.iloc[4]  # e.g. "ord" / "num" / "cat"
+
+        # Collect all columns in `data` that contain `var_name`
+        var_in_data = [col for col in col_names_data if var_name in col]
+
+        if var_type == "ord":
+            ord_vars.append(var_in_data)
+        elif var_type == "num":
+            num_vars.append(var_in_data)
+        elif var_type == "cat":
+            cat_vars.append(var_in_data)
+        else: 
+            rest.append(var_in_data)
+
+    # Example: manually add a column named 'trtname' to cat_vars
+    cat_vars.append(['trtname'])
+
+    # Flatten each list-of-lists into a single array
+    ord_vars = np.concatenate(ord_vars)
+    cat_vars = np.concatenate(cat_vars)
+    num_vars = np.concatenate(num_vars)
+
+    # Convert them to plain Python strings
+    ord_vars = [str(col) for col in ord_vars]
+    cat_vars = [str(col) for col in cat_vars]
+    num_vars = [str(col) for col in num_vars]
+    if 'masc_ma22acx_c' in ord_vars: 
+        ord_vars.remove('masc_ma22acx_c')
+    if 'masc_ma31hfx_c' in ord_vars:
+        ord_vars.remove('masc_ma31hfx_c')
+    
+    cat_vars_str, cat_vars_num =  [], []
+    
+    for col in cat_vars:
+        val = df_X[col].dropna().unique()[0]
+        
+        # Check if it's a (Python or NumPy) string
+        if isinstance(val, (str, np.str_)):
+            cat_vars_str.append(str(col))  # ensure column name is a Python str
+        # Check if it's a (Python or NumPy) float
+        elif isinstance(val, (float, np.floating)):
+            cat_vars_num.append(str(col))  # ensure column name is a Python str
+        else:
+            rest.append(str(col))          # store in `rest` for debugging
+
+
+    ord_vars = list(set(ord_vars))
+    ord_vars = list(set(ord_vars) - set(num_vars) - set(cat_vars_str) - set(cat_vars_num))
+    cat_vars_str = list(set(cat_vars_str) - set(num_vars) - set(ord_vars))
+    cat_vars_num = list(set(cat_vars_num) - set(num_vars) - set(ord_vars))
+    
+    
+    print("\nOrdinal variables:", len(ord_vars))
+    print("Numeric variables:", len(num_vars))
+    print("Categorical numeric variables:", len(cat_vars_num))
+    print("Categorical string variables:", len(cat_vars_str))
+    
+    check_overlap(num_vars= num_vars, ord_vars= ord_vars, cat_vars_str=cat_vars_str, cat_vars_num = cat_vars_num)
+    
+    return ord_vars, num_vars,  cat_vars_str, cat_vars_num
+
+def get_results_from_random_search(random_search, outcome_short, rater_out, rater_pred, thr_drop_missing, get_dist=False):
+    
+    # Define the columns for storing model results
+    cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
+                'Mean Squared Error', 'Root Mean Squared Error', 'Mean Absolute Error',
+                'R² Score', 'Outcome Variable', 'Number of Features',
+                'Feature Selection Method', 'Threshold Drop Row']
+
+    cols_res_dist = cols_res + [  
+        'Std RMSE', 'Std MAE', 'Std R²',  
+        'Mean Fit Time', 'Mean Score Time'  # Extra columns when `get_dist=True`
+    ]
+    
+    # Map outcome abbreviations to their full descriptions
+    outcome_result_dict = {
+        "ODD": "SNAP ODD Symptoms T Score", "HYP": "SNAP Hyperactivity Symptoms T Score", 
+        "INATT": "SNAP Inattention Symptoms T Score", "INTERN": "SSRS Internalizing Symptoms", 
+        "SS": "SSRS Social Skills T Score", "DOM": "Parental Dominance Mean Score", 
+        "INTIM": "Parent-Child Intimacy Mean Score"
+    }
+
+    # Map rater abbreviations to full names
+    rater_dict = {
+        "m": "Mother", 
+        "f": "Father", 
+        "t": "Teacher", 
+        "all": "All Raters"
+    }
+    
+    # Generate a formatted outcome label with the rater information
+    outcome_table = outcome_result_dict[outcome_short] + "\n- rated by {}".format(rater_dict[rater_out])
+    
+    cv_results = random_search.cv_results_
+    results_df = pd.DataFrame(cv_results)  # Convert cross-validation results to a DataFrame
+    cross_val_strategy = str(random_search.cv)  # Store the cross-validation strategy
+
+    best_index = random_search.best_index_  # Get the index of the best model
+    best_results = results_df.iloc[best_index]  # Extract the best model's results
+    best_pipeline = random_search.best_estimator_  # Get the best model pipeline
+    
+    support_data = get_support_data(best_pipeline)  # Extract feature selection details
+    formatted_support_data_short = format_dict_to_text(support_data)  # Format feature selection info
+    
+    input_rater_short = rater_pred if rater_pred is not None else "all"  
+    formatted_support_data = "Selection : {} \n {}".format(rater_dict[input_rater_short], formatted_support_data_short)  
+
+    print("Metrics for Best Parameters:")
+    print(best_results[['mean_test_rmse', 'mean_test_mae', 'mean_test_r2']])  # Print best model's performance
+
+    if get_dist:
+        # Determine the number of cross-validation splits
+        n_splits = max(int(key.split('_')[0].replace("split", "")) 
+                for key in random_search.cv_results_.keys() 
+                if key.startswith("split")) + 1
+        
+        # Extract performance scores from each split
+        r2 = [cv_results[f"split{i}_test_r2"][best_index] for i in range(n_splits)]
+        mae = [cv_results[f"split{i}_test_mae"][best_index] for i in range(n_splits)]
+        mse = [cv_results[f"split{i}_test_rmse"][best_index] ** 2 for i in range(n_splits)]
+        rmse = [cv_results[f"split{i}_test_rmse"][best_index] for i in range(n_splits)]
+
+        # Extract standard deviations of performance metrics
+        std_rmse = truncate(best_results['std_test_rmse'], 4) if 'std_test_rmse' in best_results else None
+        std_mae = truncate(best_results['std_test_mae'], 4) if 'std_test_mae' in best_results else None
+        std_r2 = truncate(best_results['std_test_r2'], 4) if 'std_test_r2' in best_results else None
+
+        # Extract model fit time statistics
+        mean_fit_time = truncate(best_results['mean_fit_time'], 4) if 'mean_fit_time' in best_results else None
+        mean_score_time = truncate(best_results['mean_score_time'], 4) if 'mean_score_time' in best_results else None
+
+    else: 
+        # Extract single best performance metrics if no distribution is required
+        rmse = - truncate(best_results['mean_test_rmse'], 4)
+        mse = truncate(best_results['mean_test_rmse'] ** 2, 4)
+        mae = - truncate(best_results['mean_test_mae'], 4)
+        r2 = truncate(best_results['mean_test_r2'], 4)
+
+    model_name = best_pipeline.named_steps['regressor'].__class__.__name__  # Get model name
+
+    # Format hyperparameter values
+    params_values = dict(zip([key.replace('regressor__', '') for key in random_search.best_params_.keys()], 
+                             random_search.best_params_.values()))
+    
+    formatted_params = format_dict_to_text(params_values)  # Format hyperparameter details
+
+    # Check if feature selection was used in the pipeline
+    if 'correlation_selector' in random_search.best_estimator_.named_steps.keys():
+        n_estimators = best_pipeline.named_steps['correlation_selector'].get_params()["model"].get_params()["n_estimators"]
+        name = type(best_pipeline.named_steps['correlation_selector'].get_params()["model"]).__name__
+        threshold = best_pipeline.named_steps['correlation_selector'].get_params()['threshold']
+        
+        corr_params_dict = {"Model Type": name, "N Estimators": n_estimators, "Threshold": threshold}
+        corr_params_text = format_dict_to_text(corr_params_dict)
+
+        feature_select_meth = 'Correlation Selector (Model-Based) \n{}'.format(corr_params_text)
+        print(feature_select_meth)
+        
+    else: 
+        feature_select_meth = 'No feature selection'  # Default if no feature selection is used
+
+    # Create a dictionary for storing results
+    new_row = dict(zip(
+        cols_res_dist if get_dist else cols_res,
+        [
+            model_name, cross_val_strategy, formatted_params, mse, rmse, mae, r2,  
+            outcome_table, formatted_support_data, feature_select_meth, thr_drop_missing
+        ] + ([std_rmse, std_mae, std_r2, mean_fit_time, mean_score_time] if get_dist else [])
+    ))
+
+    return new_row
+
+
+def save_cv_result_to_table(file_path_save, new_row, nrows2drop=0, save=False, reduced=False, verify_before_save=True):
+    
+    cols_res = list(new_row.keys())  # Extract column names from new result row
+    
+    if os.path.exists(file_path_save):
+        df_result = pd.read_csv(file_path_save)  # Load existing results file
+
+        if 'Unnamed: 0' in df_result.columns:
+            df_result = df_result.drop(columns='Unnamed: 0')  # Remove index column if present
+        print("Column names from table : ", list(df_result.columns))
+    else:
+        df_result = pd.DataFrame(columns=cols_res)  # Create new DataFrame if file does not exist
+    
+    if df_result.empty:
+        result_df = pd.DataFrame([new_row])  # Create DataFrame from first result row
+    else: 
+        if not ((df_result == new_row).all(axis=1)).any():  # Avoid duplicate entries
+            result_df = pd.concat([df_result, pd.DataFrame([new_row])], ignore_index=True)
+        else: 
+            print('\n ROW ALREADY EXISTS')
+            result_df = df_result
+
+    print("\n NEW RESULTS TABLE (not saved):") 
+    print(result_df[:10].to_string())  # Display top 10 rows
+
+    if verify_before_save:
+        reduce_check = input("Do you wish to remove a row / N rows? (y,n)")
+        if reduce_check.upper() == "Y":
+            nrows2drop = int(input("How many rows should be dropped? (enter a number)"))
+            df_result_reduced = result_df.iloc[:df_result.shape[0]-nrows2drop, :]  # Drop last `nrows2drop` rows        
+            print("\n REDUCED RESULTS TABLE :") 
+            print(df_result_reduced[:10].to_string())
+        
+            reduced_ = input("Save reduced table? (y/n)...")
+            reduced = True if reduced_.upper() == "Y" else False
+        
+        if not reduce_check or not reduced:
+            save_ = input("Save full table? (y,n)")
+            save = True if save_.upper() == "Y" else False
+    
+    if save:
+        print('... Saving')
+        result_df.to_csv(file_path_save) if not reduced else df_result_reduced.to_csv(file_path_save)
+        print("\n TABLE SAVED TO FILE")
+
+
+def check_duplicates(df_X):
+    print("\nChecking for duplicates...")
+    dup_cols = df_X.columns[df_X.columns.duplicated()].tolist()
+    print("Duplicated column names:", dup_cols)
+    return dup_cols
+
+###################### FORMAT #####################
 def value_matches(table_value,input_value):
 
     rater_lower = input_value.lower()
@@ -30,7 +341,7 @@ def feature_selection_matches(table_value, corr_select):
         return ("no feature selection" in value_lower)
 
 
-######### this function ode snot work properly 
+
 def find_result_in_file(file_path_save, model_type, corr_select, thr_drop_row, rater_pred, rater_out):
     
     rater_dict = {
@@ -87,6 +398,8 @@ def find_result_in_file(file_path_save, model_type, corr_select, thr_drop_row, r
 
     return not match.empty
 
+
+
 def get_support_data(pipeline):
     # Define the extensions to check
     extensions = ['m', #mother 
@@ -109,7 +422,6 @@ def get_support_data(pipeline):
     }
     return support_data
 
-#support_data_dict = get_support_data(pipeline)
 
 
 def format_dict_to_text(data_dict): # get support data as formated text for results table 
@@ -124,177 +436,7 @@ def format_dict_to_text(data_dict): # get support data as formated text for resu
     formatted_text = "\n".join(lines)
     return formatted_text
 
-def get_results_from_random_search(random_search, outcome_short, rater_out, rater_pred, thr_drop_missing, get_dist=False):
-    
-    cols_res = ['Model Name', 'Cross Validation Type', 'Hyperparameters',
-                'Mean Squared Error', 'Root Mean Squared Error', 'Mean Absolute Error',
-                'R² Score', 'Outcome Variable', 'Number of Features',
-                'Feature Selection Method', 'Threshold Drop Row']
 
-    cols_res_dist = cols_res + [  # store additional data 
-        'Std RMSE', 'Std MAE', 'Std R²',  
-        'Train RMSE', 'Train MAE', 'Train R²',  
-        'Mean Fit Time', 'Mean Score Time'
-    ]
-    
-    outcome_result_dict = {
-        "ODD": "SNAP ODD Symptoms T Score", "HYP": "SNAP Hyperactivity Symptoms T Score", 
-        "INATT": "SNAP Inattention Symptoms T Score", "INTERN": "SSRS Internalizing Symptoms", 
-        "SS": "SSRS Social Skills T Score", "DOM": "Parental Dominance Mean Score", 
-        "INTIM": "Parent-Child Intimacy Mean Score"
-    }
-
-    rater_dict = {
-        "m": "Mother", 
-        "f": "Father", 
-        "t": "Teacher", 
-        "all": "All Raters"
-    }
-    
-    outcome_table = outcome_result_dict[outcome_short] + "\n- rated by {}".format(rater_dict[rater_out])
-    
-    cv_results = random_search.cv_results_
-    results_df = pd.DataFrame(cv_results)
-    cross_val_strategy = str(random_search.cv)
-
-    best_index = random_search.best_index_
-    best_results = results_df.iloc[best_index]  # Best results relating to best hyperparam configuration 
-    best_pipeline = random_search.best_estimator_
-    
-    support_data = get_support_data(best_pipeline)
-    formatted_support_data_short = format_dict_to_text(support_data)
-    
-    input_rater_short = rater_pred if rater_pred is not None else "all"
-    formatted_support_data = "Selection : {} \n {}".format(rater_dict[input_rater_short], formatted_support_data_short)
-
-    print("Metrics for Best Parameters:")
-    print(best_results[['mean_test_rmse', 'mean_test_mae', 'mean_test_r2']])
-    
-    if get_dist:
-        n_splits = max(int(key.split('_')[0].replace("split", "")) 
-                for key in random_search.cv_results_.keys() 
-                if key.startswith("split")) + 1
-        
-        r2 = [cv_results[f"split{i}_test_r2"][best_index] for i in range(n_splits)]
-        mae = [cv_results[f"split{i}_test_mae"][best_index] for i in range(n_splits)]
-        mse = [cv_results[f"split{i}_test_rmse"][best_index] ** 2 for i in range(n_splits)]
-        rmse = [cv_results[f"split{i}_test_rmse"][best_index] for i in range(n_splits)]
-
-        # Extract additional metrics for later analysis
-        std_rmse = truncate(best_results['std_test_rmse'], 4)
-        std_mae = truncate(best_results['std_test_mae'], 4)
-        std_r2 = truncate(best_results['std_test_r2'], 4)
-        train_rmse = truncate(best_results['mean_train_rmse'], 4)
-        train_mae = truncate(best_results['mean_train_mae'], 4)
-        train_r2 = truncate(best_results['mean_train_r2'], 4)
-        mean_fit_time = truncate(best_results['mean_fit_time'], 4)
-        mean_score_time = truncate(best_results['mean_score_time'], 4)
-
-    else: 
-        rmse = - truncate(best_results['mean_test_rmse'], 4)
-        mse = truncate(best_results['mean_test_rmse'] ** 2, 4)
-        mae = - truncate(best_results['mean_test_mae'], 4)
-        r2 = truncate(best_results['mean_test_r2'], 4)
-
-    model_name = best_pipeline.named_steps['regressor'].__class__.__name__
-
-    params_values = dict(zip([key.replace('regressor__', '') for key in random_search.best_params_.keys()], 
-                             random_search.best_params_.values()))
-    
-    formatted_params = format_dict_to_text(params_values)
-
-    if 'correlation_selector' in random_search.best_estimator_.named_steps.keys():
-        n_estimators = best_pipeline.named_steps['correlation_selector'].get_params()["model"].get_params()["n_estimators"]
-        name = type(best_pipeline.named_steps['correlation_selector'].get_params()["model"]).__name__
-        threshold = best_pipeline.named_steps['correlation_selector'].get_params()['threshold']
-        
-        corr_params_dict = {"Model Type": name, "N Estimators": n_estimators, "Threshold": threshold}
-        corr_params_text = format_dict_to_text(corr_params_dict)
-
-        feature_select_meth = 'Correlation Selector (Model-Based) \n{}'.format(corr_params_text)
-        print(feature_select_meth)
-        
-    else: 
-        feature_select_meth = 'No feature selection'
-
-    # Choose the appropriate column list based on `get_dist`
-    new_row = dict(zip(
-        cols_res_dist if get_dist else cols_res,
-        [
-            model_name, cross_val_strategy, formatted_params, mse, rmse, mae, r2,  
-            outcome_table, formatted_support_data, feature_select_meth, thr_drop_missing
-        ] + ([std_rmse, std_mae, std_r2, train_rmse, train_mae, train_r2, mean_fit_time, mean_score_time] if get_dist else [])
-    ))
-
-    return new_row
-
-
-def save_cv_result_to_table(file_path_save, new_row, nrows2drop = 0 , save= False, reduced= False, verify_before_save = True):
-    
-    cols_res = list(new_row.keys())
-    
-    if os.path.exists(file_path_save):
-        df_result  = pd.read_csv(file_path_save)
-
-        if 'Unnamed: 0' in df_result.columns:
-            df_result = df_result.drop(columns= 'Unnamed: 0')
-        print("Column names from table : ", list(df_result.columns))
-        # will throw an error is the column naames in file ar enot the same as cols res. ß
-    else:
-        df_result = pd.DataFrame(columns= cols_res)
-    
-    if df_result.empty:
-        result_df = pd.DataFrame([new_row]) # if dataframe doesnt exists yet or is empty, create it 
-    else: 
-        if not ((df_result == new_row).all(axis=1)).any() : # check if row already exists in saved file 
-            result_df = pd.concat([df_result, pd.DataFrame([new_row])], ignore_index=True)
-        else: 
-            print('\n ROW ALREADY EXISTS')
-            result_df = df_result
-
-    print("\n NEW RESULTS TABLE (not saved):") 
-    print(result_df[:10].to_string())
-    
-    
-    if verify_before_save:
-        reduce_check= input("Do you wish to remove a row / N rows? (y,n)")
-        if reduce_check.upper() == "Y":
-            nrows2drop = int(input("How many rows should be dropped? (enter a number)"))
-            df_result_reduced = result_df.iloc[:df_result.shape[0]-nrows2drop, :] # if desired rwmove some rows (if mistake)        
-            print("\n REDUCED RESULTS TABLE :") 
-            print(df_result_reduced[:10].to_string())
-        
-            reduced_  = input("Save reduced table? (y/n)...")
-            reduced = True if reduced_.upper() == "Y" else False
-        
-        if not reduce_check or not reduced:
-            print(" \n NEW RESULTS TABLE (not saved):") 
-            print(result_df[:10].to_string())
-            save_ = input("Save full table? (y,n)" )
-
-            save = True if save_.upper() == "Y" else False
-    
-    else: 
-        if reduced : 
-            df_result_reduced = result_df.iloc[:df_result.shape[0]-nrows2drop, :] # if desired rwmove some rows (if mistake)        
-            print("REDUCED RESULTS TABLE :") 
-            print(df_result_reduced[:10].to_string())
-    
-
-    if save :
-        print('... Saving')
-        if reduced:
-            print('... Reduced table')
-            df_result_reduced.to_csv(file_path_save)
-        else:
-            print('... Full')
-            result_df.to_csv(file_path_save)
-        verify   = pd.read_csv(file_path_save)
-    
-        print("\n TABLE SAVED TO FILE : ")
-        print(verify[:20].drop(columns="Unnamed: 0").to_string())
-    else: 
-        print("Save set to False. Set save to True to save the new Dataframe.")
 
 def truncate(value, decimals):
     value = Decimal(value)
@@ -409,147 +551,3 @@ def get_params_from_result(file_path_save, how= "best", index = None):
 
 
 
-def check_overlap(ord_vars, num_vars,  cat_vars_str, cat_vars_num):
-    print("\n Checking for overlaps.. ")
-    feature_assignments = defaultdict(list)
-
-    # Track which transformer each column is assigned to
-    for feature in num_vars:
-        feature_assignments[feature].append('num_pipe')
-    for feature in cat_vars_str:
-        feature_assignments[feature].append('cat_str_pipe')
-    for feature in cat_vars_num:
-        feature_assignments[feature].append('cat_num_pipe')
-    for feature in ord_vars:
-        feature_assignments[feature].append('ord_pipe')
-
-    # Identify duplicates
-    duplicates = {feat: pipes for feat, pipes in feature_assignments.items() if len(pipes) > 1}
-
-    if duplicates:
-        print("❌ Duplicate features assigned to multiple transformers:")
-        for feature, pipes in duplicates.items():
-            print(f"{feature}: {pipes}")
-        raise ValueError("Fix duplicate column assignments before running the pipeline.")
-        
-def prepare_data(pred, out, rater_pred, rater_out, thr_drop_missing, outcome_var):
-    print("\nPreparing data...")
-
-    if rater_pred is not None:
-        col_pred = [col for col in pred.columns if col.endswith(rater_pred) or col.endswith("c")]
-        col_pred.append("src_subject_id")
-        col_pred.append("trtname")
-        pred = pred[col_pred]
-
-    # Process outcome columns
-    col_out_rater = [col for col in out.columns if col.endswith(rater_out) ]
-    out_rater = out[np.concatenate((['src_subject_id'], col_out_rater))]
-
-    out_rater = out_rater.rename(
-        columns={col: f"{col}_out" for col in out_rater.columns if col != 'src_subject_id'}
-    )
-    
-
-    y_col = "_".join([outcome_var, rater_out, "out"])
-
-
-    # Merge predictions and outcomes on 'src_subject_id'
-    try : 
-        data = pd.merge(out_rater[[y_col, 'src_subject_id']], pred, how='left', on='src_subject_id')
-        data = audit.remove_cols(data, thr_drop_missing=thr_drop_missing)
-        if y_col not in data.columns: 
-            print("{} has been removed from dataframe during audit, as there is not enough data available.".format(y_col))
-            return None, None, None, None 
-    except KeyError as e:
-        print(str(e))
-        return None, None, None, None 
-
-    # Prepare feature matrix and target array
-    X_cols = [col for col in data.columns if col not in [y_col]]
-    data = data.dropna(subset=[y_col])
-    y = np.array(data[y_col])
-    print("\nOutcome to predict (Y) : ", y_col)
-    print("\nY shape: ", y.shape)
-    df_X = data[X_cols].drop(columns='src_subject_id')
-    print("X shape ", df_X.shape)
-    rater_count_df_X = rater_count(df_X)
-
-    return data, df_X, y, rater_count_df_X
-
-def get_var_types(df_X, types_file_path ):
-    print("\nExtracting variable types from file...")
-    
-    col_names_data = list(df_X.columns)
-
-    ord_vars, num_vars, cat_vars, rest = [], [], [], []
-
-    types_df = pd.read_excel(types_file_path, sheet_name='Sheet1')
-
-    for _, row in types_df.iterrows():
-        var_name = row.iloc[1]  # e.g. variable name in the spreadsheet
-        var_type = row.iloc[4]  # e.g. "ord" / "num" / "cat"
-
-        # Collect all columns in `data` that contain `var_name`
-        var_in_data = [col for col in col_names_data if var_name in col]
-
-        if var_type == "ord":
-            ord_vars.append(var_in_data)
-        elif var_type == "num":
-            num_vars.append(var_in_data)
-        elif var_type == "cat":
-            cat_vars.append(var_in_data)
-        else: 
-            rest.append(var_in_data)
-
-    # Example: manually add a column named 'trtname' to cat_vars
-    cat_vars.append(['trtname'])
-
-    # Flatten each list-of-lists into a single array
-    ord_vars = np.concatenate(ord_vars)
-    cat_vars = np.concatenate(cat_vars)
-    num_vars = np.concatenate(num_vars)
-
-    # Convert them to plain Python strings
-    ord_vars = [str(col) for col in ord_vars]
-    cat_vars = [str(col) for col in cat_vars]
-    num_vars = [str(col) for col in num_vars]
-    if 'masc_ma22acx_c' in ord_vars: 
-        ord_vars.remove('masc_ma22acx_c')
-    if 'masc_ma31hfx_c' in ord_vars:
-        ord_vars.remove('masc_ma31hfx_c')
-    
-    cat_vars_str, cat_vars_num =  [], []
-    
-    for col in cat_vars:
-        val = df_X[col].dropna().unique()[0]
-        
-        # Check if it's a (Python or NumPy) string
-        if isinstance(val, (str, np.str_)):
-            cat_vars_str.append(str(col))  # ensure column name is a Python str
-        # Check if it's a (Python or NumPy) float
-        elif isinstance(val, (float, np.floating)):
-            cat_vars_num.append(str(col))  # ensure column name is a Python str
-        else:
-            rest.append(str(col))          # store in `rest` for debugging
-
-
-    ord_vars = list(set(ord_vars))
-    ord_vars = list(set(ord_vars) - set(num_vars) - set(cat_vars_str) - set(cat_vars_num))
-    cat_vars_str = list(set(cat_vars_str) - set(num_vars) - set(ord_vars))
-    cat_vars_num = list(set(cat_vars_num) - set(num_vars) - set(ord_vars))
-    
-    
-    print("\nOrdinal variables:", len(ord_vars))
-    print("Numeric variables:", len(num_vars))
-    print("Categorical numeric variables:", len(cat_vars_num))
-    print("Categorical string variables:", len(cat_vars_str))
-    
-    check_overlap(num_vars= num_vars, ord_vars= ord_vars, cat_vars_str=cat_vars_str, cat_vars_num = cat_vars_num)
-    
-    return ord_vars, num_vars,  cat_vars_str, cat_vars_num
-
-def check_duplicates(df_X):
-    print("\nChecking for duplicates...")
-    dup_cols = df_X.columns[df_X.columns.duplicated()].tolist()
-    print("Duplicated column names:", dup_cols)
-    return dup_cols
